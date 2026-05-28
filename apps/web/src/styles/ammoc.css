@@ -1,0 +1,56 @@
+/* AMMOC Design System — tokens */
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Brand greens */
+  --ammoc-green-900: #0F4B22;
+  --ammoc-green-800: #166331;
+  --ammoc-green-700: #1F7A3D;
+  --ammoc-green:     #2A8A3A;
+  --ammoc-green-500: #3FA34F;
+  --ammoc-green-100: #E6F0E5;
+  --ammoc-green-50:  #F2F7EF;
+
+  /* Brand reds */
+  --ammoc-red-900:  #872A23;
+  --ammoc-red-700:  #C2342B;
+  --ammoc-red:      #E94434;
+  --ammoc-red-100:  #FCEBE8;
+
+  /* Neutrals */
+  --ammoc-ink-900: #1F1F1F;
+  --ammoc-ink:     #2F2F2F;
+  --ammoc-ink-600: #555555;
+  --ammoc-ink-400: #8A8A8A;
+  --ammoc-line:    #D8D4CC;
+  --ammoc-line-2:  #ECEAE3;
+  --ammoc-paper:   #FFFFFF;
+  --ammoc-paper-2: #FAF7F1;
+  --ammoc-paper-3: #F2EFE7;
+
+  /* Status */
+  --status-online:  #4ade80;
+  --status-offline: var(--ammoc-line);
+  --color-yellow:   #D97706;
+  --color-yellow-bg:#FEF3C7;
+  --color-blue:     #1D4ED8;
+  --color-blue-bg:  #EFF6FF;
+
+  /* Typography */
+  --font-display: "Barlow", "Inter", system-ui, sans-serif;
+  --font-body:    "Inter", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  /* Spacing (base 4px) */
+  --s-1: 4px;  --s-2: 8px;   --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px;  --s-8: 32px; --s-10: 40px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 14px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
+  --shadow-lg:   0 4px 6px rgba(0,0,0,.04), 0 12px 40px rgba(0,0,0,.07);
+}
