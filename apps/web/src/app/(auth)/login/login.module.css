@@ -105,7 +105,7 @@
 
 .error {
   background: var(--ammoc-red-100);
-  border: 1px solid #fca5a5;
+  border: 1px solid var(--ammoc-red);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   font-size: 12.5px;

@@ -29,8 +29,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push('/dashboard');
     router.refresh();
+    router.push('/dashboard');
   }
 
   return (
