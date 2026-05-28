@@ -7,7 +7,7 @@ export default () => ({
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
   },
   evolution: {
-    url: process.env.EVOLUTION_URL ?? 'http://2.25.139.166:8085',
+    url: process.env.EVOLUTION_URL ?? '',
     apiKey: process.env.EVOLUTION_API_KEY ?? '',
   },
 });
