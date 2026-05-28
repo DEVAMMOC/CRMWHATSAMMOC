@@ -40,6 +40,22 @@ function initials(name: string): string {
   return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 }
 
+// Hoisted outside Sidebar to avoid React remounting on every render
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/'));
+  return (
+    <Link
+      href={item.href}
+      className={`${styles.navItem} ${isActive ? styles.navItemActive : ''}`}
+    >
+      <span className={styles.navIcon}>{item.icon}</span>
+      {item.label}
+      {item.badge != null && <span className={styles.navBadge}>{item.badge}</span>}
+      {item.dot && <span className={styles.navDot} />}
+    </Link>
+  );
+}
+
 interface SidebarProps {
   user: AppUser;
 }
@@ -51,23 +67,8 @@ export default function Sidebar({ user }: SidebarProps) {
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push('/login');
     router.refresh();
-  }
-
-  function NavLink({ item }: { item: NavItem }) {
-    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/'));
-    return (
-      <Link
-        href={item.href}
-        className={`${styles.navItem} ${isActive ? styles.navItemActive : ''}`}
-      >
-        <span className={styles.navIcon}>{item.icon}</span>
-        {item.label}
-        {item.badge != null && <span className={styles.navBadge}>{item.badge}</span>}
-        {item.dot && <span className={styles.navDot} />}
-      </Link>
-    );
+    router.push('/login');
   }
 
   return (
@@ -87,18 +88,18 @@ export default function Sidebar({ user }: SidebarProps) {
 
       <div className={styles.body}>
         <div className={styles.navSection}>Meu painel</div>
-        {FUNCIONARIO_NAV.map(item => <NavLink key={item.href} item={item} />)}
+        {FUNCIONARIO_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
 
         <div className={styles.navSection}>WhatsApp</div>
-        {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item} />)}
+        {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
 
         <div className={styles.navSection}>Organização</div>
-        {ORG_NAV.map(item => <NavLink key={item.href} item={item} />)}
+        {ORG_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
 
         {(user.role === 'supervisor' || user.role === 'admin') && (
           <>
             <div className={styles.navSection}>Admin</div>
-            {ADMIN_NAV.map(item => <NavLink key={item.href} item={item} />)}
+            {ADMIN_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
           </>
         )}
       </div>
