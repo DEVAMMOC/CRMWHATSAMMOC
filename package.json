@@ -1,0 +1,14 @@
+{
+  "name": "ammoc-crmwhats",
+  "private": true,
+  "version": "0.1.0",
+  "engines": { "node": ">=20", "pnpm": ">=9" },
+  "scripts": {
+    "dev": "pnpm --parallel dev",
+    "dev:api": "pnpm --filter @crmwhats/api dev",
+    "dev:web": "pnpm --filter @crmwhats/web dev",
+    "build": "pnpm --filter @crmwhats/types build && pnpm --parallel --filter !@crmwhats/types build",
+    "test": "pnpm --parallel test",
+    "test:api": "pnpm --filter @crmwhats/api test"
+  }
+}
