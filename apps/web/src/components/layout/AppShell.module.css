@@ -1,0 +1,14 @@
+/* apps/web/src/components/layout/AppShell.module.css */
+.shell {
+  display: grid;
+  grid-template-columns: 216px 1fr;
+  min-height: 100vh;
+  background: var(--ammoc-paper-2);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}

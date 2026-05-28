@@ -1,0 +1,186 @@
+/* apps/web/src/components/layout/Sidebar.module.css */
+.sidebar {
+  background: var(--ammoc-green-800);
+  border-right: 1px solid var(--ammoc-green-900);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  flex-shrink: 0;
+}
+
+.logoMark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+  color: white;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.brandSub {
+  font-size: 9px;
+  color: rgba(255,255,255,.4);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  margin-top: 2px;
+}
+
+.body {
+  padding: 12px 10px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.navSection {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.3);
+  padding: 12px 8px 5px;
+  font-family: var(--font-mono);
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255,255,255,.5);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.12s;
+}
+
+.navItem:hover {
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.75);
+  text-decoration: none;
+}
+
+.navItemActive {
+  background: rgba(255,255,255,.12);
+  color: white;
+}
+
+.navIcon {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.navBadge {
+  margin-left: auto;
+  background: var(--ammoc-red);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 99px;
+}
+
+.navDot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-online);
+}
+
+.footer {
+  border-top: 1px solid rgba(255,255,255,.09);
+  padding: 12px 10px;
+  flex-shrink: 0;
+}
+
+.userRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 7px;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ammoc-green-500), var(--ammoc-green-700));
+  border: 1.5px solid rgba(255,255,255,.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.userName {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,.85);
+}
+
+.userRole {
+  font-size: 10px;
+  color: rgba(255,255,255,.35);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.statusDot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-online);
+  border: 1.5px solid var(--ammoc-green-800);
+}
+
+.logoutBtn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,.35);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  border-radius: 5px;
+  margin-top: 4px;
+  transition: color 0.12s;
+}
+
+.logoutBtn:hover {
+  color: rgba(255,255,255,.65);
+  background: rgba(255,255,255,.05);
+}
