@@ -29,11 +29,19 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = pathname === '/' || isAuthRoute;
 
   if (!user && !isPublicRoute) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    const redirectResponse = NextResponse.redirect(new URL('/login', request.url));
+    supabaseResponse.cookies.getAll().forEach(cookie =>
+      redirectResponse.cookies.set(cookie.name, cookie.value),
+    );
+    return redirectResponse;
   }
 
   if (user && isAuthRoute) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    const redirectResponse = NextResponse.redirect(new URL('/dashboard', request.url));
+    supabaseResponse.cookies.getAll().forEach(cookie =>
+      redirectResponse.cookies.set(cookie.name, cookie.value),
+    );
+    return redirectResponse;
   }
 
   return supabaseResponse;
