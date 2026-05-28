@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, UserResponse } from '@supabase/supabase-js';
 
 @Injectable()
 export class SupabaseAdminService {
@@ -8,13 +8,13 @@ export class SupabaseAdminService {
 
   constructor(private config: ConfigService) {
     this.client = createClient(
-      this.config.get<string>('supabase.url') ?? '',
-      this.config.get<string>('supabase.serviceRoleKey') ?? '',
+      this.config.getOrThrow<string>('supabase.url'),
+      this.config.getOrThrow<string>('supabase.serviceRoleKey'),
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
   }
 
-  async getUser(token: string) {
+  async getUser(token: string): Promise<UserResponse> {
     return this.client.auth.getUser(token);
   }
 }

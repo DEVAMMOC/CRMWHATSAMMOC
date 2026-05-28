@@ -18,7 +18,7 @@ describe('AuthGuard', () => {
   let guard: AuthGuard;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     guard = new AuthGuard(mockSupabaseAdmin as unknown as SupabaseAdminService);
   });
 
