@@ -1,0 +1,114 @@
+.card {
+  background: var(--ammoc-paper);
+  border: 1px solid var(--ammoc-line-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.logoMark {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--ammoc-green-800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoText h1 {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--ammoc-ink-900);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.logoText p {
+  font-size: 11px;
+  color: var(--ammoc-ink-400);
+  margin: 1px 0 0;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ammoc-ink-900);
+  margin-bottom: 4px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--ammoc-ink-600);
+  margin-bottom: 24px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ammoc-ink);
+  margin-bottom: 5px;
+}
+
+.input {
+  width: 100%;
+  border: 1.5px solid var(--ammoc-line);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  background: var(--ammoc-paper);
+  color: var(--ammoc-ink);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input:focus {
+  border-color: var(--ammoc-green-500);
+}
+
+.submit {
+  width: 100%;
+  background: var(--ammoc-green);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-body);
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background 0.15s;
+}
+
+.submit:hover { background: var(--ammoc-green-700); }
+.submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.error {
+  background: var(--ammoc-red-100);
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--ammoc-red-700);
+  margin-top: 12px;
+}
