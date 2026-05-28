@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
 import { AuthModule } from '../auth/auth.module';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 
 @Module({
-  imports: [ConfigModule, AuthModule],
+  imports: [AuthModule],
   providers: [
     {
       provide: 'SUPABASE_CLIENT',

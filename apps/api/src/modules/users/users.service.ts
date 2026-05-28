@@ -14,7 +14,8 @@ export class UsersService {
       .eq('id', id)
       .single();
 
-    if (error || !data) throw new NotFoundException('Usuário não encontrado');
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Usuário não encontrado');
     return data as AppUser;
   }
 
@@ -36,14 +37,16 @@ export class UsersService {
       .select()
       .single();
 
-    if (error || !data) throw new NotFoundException('Usuário não encontrado');
+    if (error) throw new Error(error.message);
+    if (!data) throw new NotFoundException('Usuário não encontrado');
     return data as AppUser;
   }
 
   async setOnline(id: string, isOnline: boolean): Promise<void> {
-    await this.supabase
+    const { error } = await this.supabase
       .from('users')
       .update({ is_online: isOnline })
       .eq('id', id);
+    if (error) throw new Error(error.message);
   }
 }

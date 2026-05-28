@@ -35,8 +35,13 @@ describe('UsersService', () => {
     expect(mockSupabase.from).toHaveBeenCalledWith('users');
   });
 
-  it('findById throws NotFoundException when user not found', async () => {
+  it('findById throws Error when DB returns error', async () => {
     mockSingle.mockResolvedValue({ data: null, error: { message: 'not found' } });
+    await expect(service.findById('bad-id')).rejects.toThrow('not found');
+  });
+
+  it('findById throws NotFoundException when data is null and no DB error', async () => {
+    mockSingle.mockResolvedValue({ data: null, error: null });
     await expect(service.findById('bad-id')).rejects.toThrow(NotFoundException);
   });
 
@@ -46,5 +51,23 @@ describe('UsersService', () => {
 
     const result = await service.updateProfile('uuid-1', { name: 'Novo Nome' });
     expect(result).toEqual(updated);
+  });
+
+  it('findAll returns array of users', async () => {
+    const fakeUsers = [
+      { id: 'uuid-1', name: 'Alice', role: 'funcionario' },
+      { id: 'uuid-2', name: 'Bob', role: 'admin' },
+    ];
+    // findAll uses .order() which returns data directly (no .single())
+    mockSupabase.order.mockResolvedValue({ data: fakeUsers, error: null });
+
+    const result = await service.findAll();
+    expect(result).toEqual(fakeUsers);
+    expect(mockSupabase.from).toHaveBeenCalledWith('users');
+  });
+
+  it('setOnline throws when DB returns error', async () => {
+    mockSupabase.eq.mockResolvedValue({ error: { message: 'db error' } });
+    await expect(service.setOnline('uuid-1', true)).rejects.toThrow('db error');
   });
 });
