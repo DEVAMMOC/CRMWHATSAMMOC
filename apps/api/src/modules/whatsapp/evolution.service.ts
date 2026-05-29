@@ -116,10 +116,12 @@ export class EvolutionService {
   }
 
   async sendText(token: string, to: string, text: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/message/sendText`, {
+    // Evolution Go endpoint: POST /send/text
+    // `formatJid: true` lets Evolution Go handle the @s.whatsapp.net suffix automatically
+    const res = await fetch(`${this.baseUrl}/send/text`, {
       method: 'POST',
       headers: this.instanceHeaders(token),
-      body: JSON.stringify({ number: to, text }),
+      body: JSON.stringify({ number: to, text, formatJid: true }),
     });
     if (!res.ok) throw new Error(`Evolution sendText failed: ${res.status} ${await res.text()}`);
   }

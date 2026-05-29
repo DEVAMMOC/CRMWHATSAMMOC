@@ -109,7 +109,8 @@ export class WhatsAppService {
       .single();
     if (convErr || !conv) throw new BadRequestException('Conversa não encontrada');
 
-    const to = `${(conv as { contact_number: string }).contact_number}@s.whatsapp.net`;
+    // Evolution Go will format the JID (formatJid: true in sendText)
+    const to = (conv as { contact_number: string }).contact_number;
 
     // Send via Evolution Go
     await this.evolution.sendText(user.evolution_instance_token, to, text);
