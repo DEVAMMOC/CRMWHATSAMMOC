@@ -121,7 +121,15 @@ export default function MeuNumeroPage() {
     }, 3000);
   }, []);
 
-  useEffect(() => () => { if (qrPollRef.current) clearInterval(qrPollRef.current); }, []);
+  // Auto-start status polling if page is loaded while in connecting state
+  // (e.g. user reloaded after scanning QR). Also drives real-time status
+  // sync via the API's getStatus → Evolution Go check.
+  useEffect(() => {
+    if (wsStatus === 'connecting' && token) {
+      startQrPoll(token);
+    }
+    return () => { if (qrPollRef.current) clearInterval(qrPollRef.current); };
+  }, [wsStatus, token, startQrPoll]);
 
   // ── Actions ───────────────────────────────────────────────────────────────────
   async function handleConnect() {

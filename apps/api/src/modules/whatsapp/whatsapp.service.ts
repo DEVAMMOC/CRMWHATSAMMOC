@@ -73,6 +73,24 @@ export class WhatsAppService {
 
   async getStatus(userId: string): Promise<{ status: string; instanceId: string | null }> {
     const user = await this.getUserRow(userId);
+
+    // If there is a live instance token, sync the real-time status from
+    // Evolution Go so the DB stays accurate without relying on webhooks.
+    if (user.evolution_instance_token && user.whatsapp_status !== 'disconnected') {
+      try {
+        const evo = await this.evolution.getStatus(user.evolution_instance_token);
+        if (evo.status !== user.whatsapp_status) {
+          await this.supabase
+            .from('users')
+            .update({ whatsapp_status: evo.status })
+            .eq('id', userId);
+          return { status: evo.status, instanceId: user.evolution_instance_id };
+        }
+      } catch {
+        // Evolution Go unreachable — return last known DB status
+      }
+    }
+
     return {
       status: user.whatsapp_status,
       instanceId: user.evolution_instance_id,
