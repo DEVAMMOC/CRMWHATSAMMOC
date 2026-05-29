@@ -50,6 +50,16 @@ export default function ConversaPage() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Contact info panel
+  const [showInfo, setShowInfo] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editMunicipality, setEditMunicipality] = useState('');
+  const [savingInfo, setSavingInfo] = useState(false);
+
+  // Share
+  const [sharing, setSharing] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -76,7 +86,12 @@ export default function ConversaPage() {
           .order('sent_at', { ascending: true }),
       ]);
 
-      if (convData) setConv(convData as Conversation);
+      if (convData) {
+        const c = convData as Conversation;
+        setConv(c);
+        setEditName(c.contact_name ?? '');
+        setEditMunicipality(c.municipality ?? '');
+      }
       if (msgData) setMessages(msgData as Message[]);
       setLoading(false);
     })();
@@ -98,7 +113,17 @@ export default function ConversaPage() {
         (payload) => {
           setMessages(prev => {
             const m = payload.new as Message;
-            // Avoid duplicates (optimistic + realtime)
+            // Replace any matching optimistic message (same content + direction)
+            // so outgoing messages don't appear twice.
+            const optIdx = prev.findIndex(
+              x => x.id.startsWith('opt-') && x.content === m.content && x.direction === m.direction,
+            );
+            if (optIdx >= 0) {
+              const next = [...prev];
+              next[optIdx] = m;
+              return next;
+            }
+            // Avoid duplicates on re-subscribe
             if (prev.some(x => x.id === m.id)) return prev;
             return [...prev, m];
           });
@@ -116,7 +141,7 @@ export default function ConversaPage() {
     setSending(true);
     setError(null);
 
-    // Optimistic update
+    // Optimistic update — will be swapped out by the realtime handler
     const optimistic: Message = {
       id: `opt-${Date.now()}`,
       conversation_id: id,
@@ -143,10 +168,10 @@ export default function ConversaPage() {
         const body = await res.json().catch(() => ({ message: res.statusText }));
         throw new Error(body.message ?? 'Erro ao enviar mensagem');
       }
+      // Success — realtime will replace the optimistic entry when the DB row arrives.
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
-      // Roll back optimistic message
       setMessages(prev => prev.filter(m => m.id !== optimistic.id));
       setText(trimmed);
     } finally {
@@ -159,6 +184,58 @@ export default function ConversaPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
+    }
+  };
+
+  const handleShare = async () => {
+    if (!conv || sharing) return;
+    setSharing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${API}/api/conversations/${conv.id}/share`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(body.message ?? 'Erro ao compartilhar');
+      }
+      const result = await res.json() as { status: string };
+      setConv(prev => prev ? { ...prev, status: result.status } : prev);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleSaveInfo = async () => {
+    if (!conv || savingInfo) return;
+    setSavingInfo(true);
+    try {
+      const { error: upErr } = await supabase
+        .from('conversations')
+        .update({
+          contact_name: editName.trim() || null,
+          municipality: editMunicipality.trim() || null,
+        })
+        .eq('id', conv.id);
+      if (upErr) throw new Error(upErr.message);
+      setConv(prev => prev ? {
+        ...prev,
+        contact_name: editName.trim() || null,
+        municipality: editMunicipality.trim() || null,
+      } : prev);
+      setShowInfo(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    } finally {
+      setSavingInfo(false);
     }
   };
 
@@ -224,15 +301,172 @@ export default function ConversaPage() {
           )}
         </div>
 
-        <div style={{
-          fontSize: 11, fontWeight: 700,
-          padding: '2px 10px', borderRadius: 99,
-          background: conv?.status === 'ativa' ? 'var(--ammoc-green-100)' : 'var(--ammoc-paper-3)',
-          color: conv?.status === 'ativa' ? 'var(--ammoc-green-800)' : 'var(--ammoc-ink-400)',
-        }}>
-          {conv?.status ?? '—'}
+        {/* Header actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Share button (only for nao_salva) or status badge */}
+          {conv?.status === 'nao_salva' ? (
+            <button
+              onClick={() => void handleShare()}
+              disabled={sharing}
+              style={{
+                background: sharing ? 'var(--ammoc-line)' : 'var(--ammoc-green)',
+                color: 'white', border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                cursor: sharing ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {sharing ? 'Compartilhando...' : '🔗 Compartilhar'}
+            </button>
+          ) : (
+            <div style={{
+              fontSize: 11, fontWeight: 700,
+              padding: '2px 10px', borderRadius: 99,
+              background: conv?.status === 'ativa' ? 'var(--ammoc-green-100)' : 'var(--ammoc-paper-3)',
+              color: conv?.status === 'ativa' ? 'var(--ammoc-green-800)' : 'var(--ammoc-ink-400)',
+              whiteSpace: 'nowrap',
+            }}>
+              {conv?.status ?? '—'}
+            </div>
+          )}
+
+          {/* Contact info toggle */}
+          <button
+            onClick={() => setShowInfo(v => !v)}
+            style={{
+              background: showInfo ? 'var(--ammoc-green-100)' : 'var(--ammoc-paper-2)',
+              color: showInfo ? 'var(--ammoc-green-800)' : 'var(--ammoc-ink-600)',
+              border: '1px solid var(--ammoc-line-2)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '5px 12px', fontSize: 12, fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            aria-label="Informações do contato"
+          >
+            ℹ️ Contato
+          </button>
         </div>
       </div>
+
+      {/* Contact info panel — slides in below the header */}
+      {showInfo && (
+        <div style={{
+          background: 'var(--ammoc-paper)',
+          borderBottom: '2px solid var(--ammoc-line-2)',
+          padding: '16px 20px',
+          flexShrink: 0,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '12px 16px',
+        }}>
+          {/* Telefone (read-only) */}
+          <div>
+            <label style={{
+              display: 'block', fontSize: 11, fontWeight: 700,
+              color: 'var(--ammoc-ink-400)', marginBottom: 4,
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+              Telefone
+            </label>
+            <div style={{
+              padding: '8px 12px',
+              background: 'var(--ammoc-paper-2)',
+              border: '1.5px solid var(--ammoc-line)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 14, color: 'var(--ammoc-ink-600)',
+            }}>
+              {conv?.contact_number ?? '—'}
+            </div>
+          </div>
+
+          {/* Nome (editable) */}
+          <div>
+            <label style={{
+              display: 'block', fontSize: 11, fontWeight: 700,
+              color: 'var(--ammoc-ink-400)', marginBottom: 4,
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+              Nome
+            </label>
+            <input
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              placeholder="Nome do contato"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '8px 12px',
+                border: '1.5px solid var(--ammoc-line)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 14, outline: 'none',
+                background: 'var(--ammoc-paper)',
+                color: 'var(--ammoc-ink-900)',
+              }}
+            />
+          </div>
+
+          {/* Município (editable) */}
+          <div>
+            <label style={{
+              display: 'block', fontSize: 11, fontWeight: 700,
+              color: 'var(--ammoc-ink-400)', marginBottom: 4,
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+              Município
+            </label>
+            <input
+              value={editMunicipality}
+              onChange={e => setEditMunicipality(e.target.value)}
+              placeholder="Município"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '8px 12px',
+                border: '1.5px solid var(--ammoc-line)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 14, outline: 'none',
+                background: 'var(--ammoc-paper)',
+                color: 'var(--ammoc-ink-900)',
+              }}
+            />
+          </div>
+
+          {/* Save / Cancel */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            <button
+              onClick={() => void handleSaveInfo()}
+              disabled={savingInfo}
+              style={{
+                background: savingInfo ? 'var(--ammoc-line)' : 'var(--ammoc-green)',
+                color: 'white', border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                padding: '8px 16px', fontSize: 13, fontWeight: 600,
+                cursor: savingInfo ? 'default' : 'pointer',
+                flex: 1,
+              }}
+            >
+              {savingInfo ? 'Salvando...' : '💾 Salvar'}
+            </button>
+            <button
+              onClick={() => {
+                setEditName(conv?.contact_name ?? '');
+                setEditMunicipality(conv?.municipality ?? '');
+                setShowInfo(false);
+              }}
+              style={{
+                background: 'var(--ammoc-paper-2)',
+                color: 'var(--ammoc-ink-600)',
+                border: '1px solid var(--ammoc-line-2)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '8px 16px', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Messages area */}
       <div style={{
@@ -298,7 +532,8 @@ export default function ConversaPage() {
                     padding: '8px 12px',
                     boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
                     border: m.direction === 'in' ? '1px solid var(--ammoc-line-2)' : 'none',
-                    opacity: m.id.startsWith('opt-') ? 0.7 : 1,
+                    opacity: m.id.startsWith('opt-') ? 0.65 : 1,
+                    transition: 'opacity 0.25s',
                   }}>
                     <div style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word' }}>
                       {m.content}
@@ -310,6 +545,7 @@ export default function ConversaPage() {
                       marginTop: 2,
                     }}>
                       {fmtTime(m.sent_at)}
+                      {m.id.startsWith('opt-') && ' ○'}
                     </div>
                   </div>
                 </div>
