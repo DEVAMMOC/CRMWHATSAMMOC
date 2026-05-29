@@ -28,6 +28,7 @@ export interface AppUser {
   whatsapp_number: string | null;
   evolution_instance_id: string | null;
   evolution_instance_token: string | null;
+  whatsapp_status: 'disconnected' | 'connecting' | 'connected';
   is_online: boolean;
   created_at: string;
 }
@@ -43,6 +44,8 @@ export interface Conversation {
   trigger_keywords: string[];
   last_message_at: string | null;
   last_synced_at: string | null;
+  shared_at: string | null;
+  shared_by: string | null;
   created_at: string;
 }
 
