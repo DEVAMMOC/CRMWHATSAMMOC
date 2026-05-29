@@ -29,32 +29,30 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/forgot-password') || pathname.startsWith('/reset-password');
   const isPublicRoute = pathname === '/' || isAuthRoute;
 
+  // Helper: build a redirect using request.nextUrl (correctly resolves public domain behind proxy)
+  const redirectTo = (path: string) => {
+    const url = request.nextUrl.clone();
+    url.pathname = path.split('?')[0];
+    url.search = path.includes('?') ? path.split('?')[1] : '';
+    const res = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach(cookie =>
+      res.cookies.set(cookie.name, cookie.value),
+    );
+    return res;
+  };
+
   // Domain restriction: only @ammoc.org.br emails allowed
   if (user && !user.email?.endsWith('@ammoc.org.br')) {
     await supabase.auth.signOut();
-    const redirectResponse = NextResponse.redirect(
-      new URL('/login?error=acesso_restrito', request.url),
-    );
-    supabaseResponse.cookies.getAll().forEach(cookie =>
-      redirectResponse.cookies.set(cookie.name, cookie.value),
-    );
-    return redirectResponse;
+    return redirectTo('/login?error=acesso_restrito');
   }
 
   if (!user && !isPublicRoute) {
-    const redirectResponse = NextResponse.redirect(new URL('/login', request.url));
-    supabaseResponse.cookies.getAll().forEach(cookie =>
-      redirectResponse.cookies.set(cookie.name, cookie.value),
-    );
-    return redirectResponse;
+    return redirectTo('/login');
   }
 
   if (user && isAuthRoute) {
-    const redirectResponse = NextResponse.redirect(new URL('/dashboard', request.url));
-    supabaseResponse.cookies.getAll().forEach(cookie =>
-      redirectResponse.cookies.set(cookie.name, cookie.value),
-    );
-    return redirectResponse;
+    return redirectTo('/dashboard');
   }
 
   return supabaseResponse;
