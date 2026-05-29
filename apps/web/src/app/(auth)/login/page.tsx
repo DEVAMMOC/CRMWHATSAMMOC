@@ -1,22 +1,38 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import styles from './login.module.css';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const urlError = searchParams.get('error');
+    if (urlError === 'acesso_restrito') {
+      setError('Acesso restrito a membros da AMMOC (@ammoc.org.br). Faça login com seu email institucional.');
+    } else if (urlError) {
+      setError('Erro de autenticação. Tente novamente.');
+    }
+  }, [searchParams]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (!email.endsWith('@ammoc.org.br')) {
+      setError('Acesso restrito a membros da AMMOC (@ammoc.org.br).');
+      setLoading(false);
+      return;
+    }
 
     const supabase = createClient();
     const { error: authError } = await supabase.auth.signInWithPassword({

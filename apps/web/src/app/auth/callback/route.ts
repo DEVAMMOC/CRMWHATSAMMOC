@@ -16,13 +16,22 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient();
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (!exchangeError) {
-      return NextResponse.redirect(`${origin}${next}`);
+    const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (exchangeError) {
+      return NextResponse.redirect(
+        `${origin}/login?error=${encodeURIComponent(exchangeError.message)}`,
+      );
     }
-    return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(exchangeError.message)}`,
-    );
+
+    // Domain restriction: only @ammoc.org.br
+    const email = data.user?.email ?? '';
+    if (!email.endsWith('@ammoc.org.br')) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(`${origin}/login?error=acesso_restrito`);
+    }
+
+    return NextResponse.redirect(`${origin}${next}`);
   }
 
   return NextResponse.redirect(`${origin}/login`);

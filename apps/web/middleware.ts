@@ -25,8 +25,20 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isAuthRoute = pathname.startsWith('/login');
+  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/auth');
   const isPublicRoute = pathname === '/' || isAuthRoute;
+
+  // Domain restriction: only @ammoc.org.br emails allowed
+  if (user && !user.email?.endsWith('@ammoc.org.br')) {
+    await supabase.auth.signOut();
+    const redirectResponse = NextResponse.redirect(
+      new URL('/login?error=acesso_restrito', request.url),
+    );
+    supabaseResponse.cookies.getAll().forEach(cookie =>
+      redirectResponse.cookies.set(cookie.name, cookie.value),
+    );
+    return redirectResponse;
+  }
 
   if (!user && !isPublicRoute) {
     const redirectResponse = NextResponse.redirect(new URL('/login', request.url));
