@@ -1,54 +1,91 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { AppUser } from '@crmwhats/types';
+import type { AppUser, Conversation } from '@crmwhats/types';
+import Image from 'next/image';
 
-const cardStyle: React.CSSProperties = {
-  background: 'var(--ammoc-paper)',
-  border: '1px solid var(--ammoc-line-2)',
-  borderRadius: 'var(--radius)',
-  padding: '24px',
-  marginBottom: 16,
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function getApiBase(): string {
+  return process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+}
+
+async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
+  const res = await fetch(`${getApiBase()}${path}`, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers ?? {}) },
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => res.statusText);
+    throw new Error(txt);
+  }
+  return res.json();
+}
+
+// ── styles ───────────────────────────────────────────────────────────────────
+
+const card: React.CSSProperties = {
+  background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)',
+  borderRadius: 'var(--radius)', padding: '24px', marginBottom: 16,
 };
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  border: '1.5px solid var(--ammoc-line)',
-  borderRadius: 'var(--radius-sm)',
-  padding: '9px 12px',
-  fontSize: 14,
+const btn = (variant: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
+  background: variant === 'primary' ? 'var(--ammoc-green)' : variant === 'danger' ? 'var(--ammoc-red)' : 'var(--ammoc-paper-2)',
+  color: variant === 'ghost' ? 'var(--ammoc-ink-600)' : 'white',
+  border: variant === 'ghost' ? '1px solid var(--ammoc-line-2)' : 'none',
+  borderRadius: 'var(--radius-sm)', padding: '8px 18px',
+  fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)',
+});
+
+const tabBtn = (active: boolean): React.CSSProperties => ({
+  padding: '8px 20px', fontSize: 13, fontWeight: active ? 700 : 500,
+  color: active ? 'var(--ammoc-green-700)' : 'var(--ammoc-ink-400)',
+  borderBottom: active ? '2px solid var(--ammoc-green)' : '2px solid transparent',
+  background: 'none', border: 'none', cursor: 'pointer',
   fontFamily: 'var(--font-body)',
-  background: 'var(--ammoc-paper)',
-  color: 'var(--ammoc-ink-900)',
-  outline: 'none',
-  boxSizing: 'border-box',
-};
+});
+
+// ── main component ────────────────────────────────────────────────────────────
 
 export default function MeuNumeroPage() {
   const supabase = createClient();
-
   const [user, setUser] = useState<AppUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [tab, setTab] = useState<'conexao' | 'conversas'>('conexao');
   const [loading, setLoading] = useState(true);
-  const [editMode, setEditMode] = useState(false);
-  const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  // ── Load user ──────────────────────────────────────────────────────────────
+  // Connection tab state
+  const [wsStatus, setWsStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [qrBase64, setQrBase64] = useState<string | null>(null);
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [pairPhone, setPairPhone] = useState('');
+  const [showPair, setShowPair] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [connError, setConnError] = useState<string | null>(null);
+  const qrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Conversations tab state
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [sharingId, setSharingId] = useState<string | null>(null);
+  const [convError, setConvError] = useState<string | null>(null);
+
+  // ── Load user + session ──────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       setLoading(true);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token ?? null;
+      setToken(accessToken);
+
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData.user?.id;
-      if (!uid) {
-        setLoading(false);
-        return;
-      }
+      if (!uid) { setLoading(false); return; }
+
       const { data } = await supabase.from('users').select('*').eq('id', uid).single();
       if (data) {
         setUser(data as AppUser);
-        setWhatsappNumber(data.whatsapp_number ?? '');
+        setWsStatus((data as AppUser).whatsapp_status ?? 'disconnected');
       }
       setLoading(false);
     }
@@ -56,316 +93,295 @@ export default function MeuNumeroPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Save number ────────────────────────────────────────────────────────────
-  async function saveNumber() {
-    if (!user) return;
-    setSaving(true);
-    setFeedback(null);
-    const { error } = await supabase
-      .from('users')
-      .update({ whatsapp_number: whatsappNumber })
-      .eq('id', user.id);
-    if (error) {
-      setFeedback({ ok: false, msg: error.message });
-    } else {
-      setUser({ ...user, whatsapp_number: whatsappNumber });
-      setFeedback({ ok: true, msg: 'Número atualizado com sucesso.' });
-      setEditMode(false);
+  // ── QR polling ────────────────────────────────────────────────────────────────
+  const startQrPoll = useCallback((tok: string) => {
+    if (qrPollRef.current) clearInterval(qrPollRef.current);
+    qrPollRef.current = setInterval(async () => {
+      try {
+        const data = await apiFetch('/api/whatsapp/qr', tok);
+        if (data.base64) setQrBase64(data.base64);
+      } catch {
+        // QR not ready yet — keep polling
+      }
+
+      // Check status
+      try {
+        const st = await apiFetch('/api/whatsapp/status', tok);
+        if (st.status === 'connected' || st.status === 'open') {
+          setWsStatus('connected');
+          setQrBase64(null);
+          if (qrPollRef.current) clearInterval(qrPollRef.current);
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+  }, []);
+
+  useEffect(() => () => { if (qrPollRef.current) clearInterval(qrPollRef.current); }, []);
+
+  // ── Actions ───────────────────────────────────────────────────────────────────
+  async function handleConnect() {
+    if (!token) return;
+    setActionLoading(true);
+    setConnError(null);
+    setQrBase64(null);
+    try {
+      await apiFetch('/api/whatsapp/connect', token, { method: 'POST', body: '{}' });
+      setWsStatus('connecting');
+      startQrPoll(token);
+    } catch (e: unknown) {
+      setConnError(e instanceof Error ? e.message : 'Erro ao conectar');
     }
-    setSaving(false);
-    setTimeout(() => setFeedback(null), 4000);
+    setActionLoading(false);
   }
 
-  const isConfigured = !!(user?.evolution_instance_id);
-
-  if (loading) {
-    return (
-      <div style={{ padding: '32px', flex: 1, color: 'var(--ammoc-ink-400)', fontSize: 14 }}>
-        Carregando...
-      </div>
-    );
+  async function handleDisconnect() {
+    if (!token) return;
+    setActionLoading(true);
+    setConnError(null);
+    try {
+      await apiFetch('/api/whatsapp/disconnect', token, { method: 'DELETE' });
+      setWsStatus('disconnected');
+      setQrBase64(null);
+      setPairCode(null);
+      if (qrPollRef.current) clearInterval(qrPollRef.current);
+    } catch (e: unknown) {
+      setConnError(e instanceof Error ? e.message : 'Erro ao desconectar');
+    }
+    setActionLoading(false);
   }
+
+  async function handlePair() {
+    if (!token || !pairPhone.trim()) return;
+    setActionLoading(true);
+    setConnError(null);
+    try {
+      const phone = pairPhone.replace(/\D/g, '');
+      const data = await apiFetch('/api/whatsapp/pair', token, {
+        method: 'POST',
+        body: JSON.stringify({ phone }),
+      });
+      setPairCode(data.code ?? 'Código não disponível');
+    } catch (e: unknown) {
+      setConnError(e instanceof Error ? e.message : 'Erro ao obter código');
+    }
+    setActionLoading(false);
+  }
+
+  // ── Load conversations ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (tab !== 'conversas' || !user) return;
+    async function load() {
+      setConvError(null);
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('owner_user_id', user!.id)
+        .in('status', ['nao_salva', 'pendente'])
+        .order('last_message_at', { ascending: false });
+      if (error) setConvError(error.message);
+      else setConversations((data ?? []) as Conversation[]);
+    }
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, user]);
+
+  async function handleShare(convId: string) {
+    if (!token) return;
+    setSharingId(convId);
+    setConvError(null);
+    try {
+      await apiFetch(`/api/conversations/${convId}/share`, token, { method: 'POST', body: '{}' });
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, status: 'pendente' as const } : c));
+    } catch (e: unknown) {
+      setConvError(e instanceof Error ? e.message : 'Erro ao compartilhar');
+    }
+    setSharingId(null);
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────────
+  if (loading) return <div style={{ padding: 32, color: 'var(--ammoc-ink-400)', fontSize: 14 }}>Carregando...</div>;
+
+  const statusColor = wsStatus === 'connected'
+    ? 'var(--ammoc-green)' : wsStatus === 'connecting'
+    ? '#F59E0B' : 'var(--ammoc-ink-400)';
+  const statusLabel = wsStatus === 'connected' ? 'Conectado' : wsStatus === 'connecting' ? 'Conectando…' : 'Desconectado';
 
   return (
-    <div style={{ padding: '32px', flex: 1, maxWidth: 680 }}>
+    <div style={{ padding: '32px', flex: 1, maxWidth: 700 }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 22,
-            fontWeight: 800,
-            color: 'var(--ammoc-ink-900)',
-            margin: '0 0 4px',
-            letterSpacing: '-0.02em',
-          }}
-        >
-          Meu Número WhatsApp
-        </h1>
-        <p style={{ color: 'var(--ammoc-ink-400)', fontSize: 13, margin: 0 }}>
-          Visualize e atualize seu número WhatsApp vinculado ao CRMWhats AMMOC.
-        </p>
+      <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--ammoc-ink-900)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
+        Meu Número WhatsApp
+      </h1>
+      <p style={{ color: 'var(--ammoc-ink-400)', fontSize: 13, margin: '0 0 20px' }}>
+        Conecte seu número e gerencie conversas.
+      </p>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--ammoc-line)', marginBottom: 20 }}>
+        <button style={tabBtn(tab === 'conexao')} onClick={() => setTab('conexao')}>Conexão</button>
+        <button style={tabBtn(tab === 'conversas')} onClick={() => setTab('conversas')}>Minhas Conversas</button>
       </div>
 
-      {/* Feedback */}
-      {feedback && (
-        <div
-          style={{
-            background: feedback.ok ? 'var(--ammoc-green-100)' : 'var(--ammoc-red-100)',
-            color: feedback.ok ? 'var(--ammoc-green-800)' : 'var(--ammoc-red-700)',
-            border: `1px solid ${feedback.ok ? 'var(--ammoc-green)' : 'var(--ammoc-red)'}`,
-            borderRadius: 'var(--radius-sm)',
-            padding: '10px 16px',
-            fontSize: 13,
-            fontWeight: 600,
-            marginBottom: 16,
-          }}
-        >
-          {feedback.msg}
-        </div>
-      )}
-
-      {/* ── Status card ───────────────────────────────────────────────────────── */}
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: '50%',
-                background: isConfigured ? 'var(--ammoc-green-100)' : 'var(--color-yellow-bg)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 22,
-                flexShrink: 0,
-              }}
-            >
-              {isConfigured ? '✅' : '⚠️'}
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: 'var(--ammoc-ink-900)',
-                  marginBottom: 4,
-                }}
-              >
-                {isConfigured ? 'Número configurado' : 'Número não configurado'}
-              </div>
-              {isConfigured ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <span style={{ fontSize: 13, color: 'var(--ammoc-ink-600)' }}>
-                    <strong>Número:</strong> {user?.whatsapp_number ?? '—'}
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--ammoc-ink-600)' }}>
-                    <strong>Instância:</strong> {user?.evolution_instance_id}
-                  </span>
+      {/* ── TAB: CONEXÃO ──────────────────────────────────────────────────────── */}
+      {tab === 'conexao' && (
+        <>
+          {/* Status card */}
+          <div style={card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ammoc-ink-900)' }}>{statusLabel}</div>
+                  {user?.whatsapp_number && (
+                    <div style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>{user.whatsapp_number}</div>
+                  )}
                 </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {wsStatus === 'disconnected' && (
+                  <button style={btn('primary')} onClick={handleConnect} disabled={actionLoading}>
+                    {actionLoading ? 'Conectando…' : 'Conectar WhatsApp'}
+                  </button>
+                )}
+                {wsStatus !== 'disconnected' && (
+                  <button style={btn('danger')} onClick={handleDisconnect} disabled={actionLoading}>
+                    Desconectar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {connError && (
+            <div style={{ background: 'var(--ammoc-red-100)', border: '1px solid var(--ammoc-red)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontSize: 13, color: 'var(--ammoc-red-700)', marginBottom: 16 }}>
+              {connError}
+            </div>
+          )}
+
+          {/* QR Code */}
+          {wsStatus === 'connecting' && (
+            <div style={{ ...card, textAlign: 'center' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ammoc-ink-900)', marginBottom: 8 }}>
+                Escaneie o QR code
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', marginBottom: 16 }}>
+                Abra o WhatsApp no celular → Aparelhos conectados → Conectar aparelho
+              </p>
+              {qrBase64 ? (
+                <Image
+                  src={qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`}
+                  alt="QR Code WhatsApp"
+                  width={220}
+                  height={220}
+                  style={{ margin: '0 auto', display: 'block', borderRadius: 8 }}
+                  unoptimized
+                />
               ) : (
-                <span style={{ fontSize: 13, color: 'var(--ammoc-ink-600)' }}>
-                  Informe seu número para que o administrador configure sua instância.
-                </span>
+                <div style={{ width: 220, height: 220, background: 'var(--ammoc-surface)', borderRadius: 8, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ammoc-ink-400)', fontSize: 13 }}>
+                  Aguardando QR…
+                </div>
+              )}
+
+              {/* Pairing code alternative */}
+              <div style={{ marginTop: 20 }}>
+                <button style={{ ...btn('ghost'), fontSize: 12 }} onClick={() => setShowPair(p => !p)}>
+                  {showPair ? 'Ocultar' : 'Usar código de pareamento'}
+                </button>
+              </div>
+
+              {showPair && (
+                <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="tel"
+                    placeholder="55479999999999"
+                    value={pairPhone}
+                    onChange={e => setPairPhone(e.target.value)}
+                    style={{ border: '1.5px solid var(--ammoc-line)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 13, fontFamily: 'var(--font-body)', background: 'var(--ammoc-paper)', color: 'var(--ammoc-ink)', outline: 'none', width: 200 }}
+                  />
+                  <button style={btn('primary')} onClick={handlePair} disabled={actionLoading || !pairPhone.trim()}>
+                    Obter código
+                  </button>
+                </div>
+              )}
+
+              {pairCode && (
+                <div style={{ marginTop: 12, background: 'var(--ammoc-green-100)', border: '1px solid var(--ammoc-green)', borderRadius: 'var(--radius-sm)', padding: '12px 20px', display: 'inline-block' }}>
+                  <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', marginBottom: 4 }}>Código de pareamento</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '0.2em', color: 'var(--ammoc-green-800)', fontFamily: 'var(--font-mono)' }}>{pairCode}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', marginTop: 4 }}>Digite este código no WhatsApp → Aparelhos conectados</div>
+                </div>
               )}
             </div>
-          </div>
+          )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {/* Status badge */}
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                padding: '4px 12px',
-                borderRadius: 99,
-                background: isConfigured ? 'var(--ammoc-green-100)' : 'var(--color-yellow-bg)',
-                color: isConfigured ? 'var(--ammoc-green-800)' : 'var(--color-yellow)',
-              }}
-            >
-              {isConfigured ? 'Conectado' : 'Não conectado'}
-            </span>
-            {/* Action button */}
-            <button
-              onClick={() => setEditMode(true)}
-              style={{
-                background: 'var(--ammoc-green)',
-                color: 'white',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                padding: '8px 16px',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {isConfigured ? 'Atualizar número' : 'Configurar número'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Info box: Evolution Go note ──────────────────────────────────────── */}
-      <div
-        style={{
-          ...cardStyle,
-          background: 'var(--color-blue-bg)',
-          border: '1px solid #BFDBFE',
-        }}
-      >
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <span style={{ fontSize: 18, flexShrink: 0 }}>ℹ️</span>
-          <div>
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: 'var(--color-blue)',
-                marginBottom: 4,
-              }}
-            >
-              Ativação via Evolution Go
+          {wsStatus === 'connected' && (
+            <div style={{ ...card, background: 'var(--ammoc-green-100)', border: '1px solid var(--ammoc-green)' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-green-800)' }}>
+                ✅ WhatsApp conectado com sucesso!
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--ammoc-green-700)', margin: '6px 0 0' }}>
+                As mensagens recebidas aparecerão na aba &quot;Minhas Conversas&quot;.
+              </p>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--ammoc-ink-600)', lineHeight: 1.5 }}>
-              A ativação da instância é feita pelo administrador do sistema na seção de{' '}
-              <strong>Configurações</strong>.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Edit / configure form ────────────────────────────────────────────── */}
-      {(editMode || !isConfigured) && (
-        <div style={cardStyle}>
-          <h2
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 16,
-              fontWeight: 700,
-              color: 'var(--ammoc-ink-900)',
-              margin: '0 0 16px',
-            }}
-          >
-            Informar número WhatsApp
-          </h2>
-
-          <div style={{ marginBottom: 8 }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: 12,
-                fontWeight: 600,
-                color: 'var(--ammoc-ink-900)',
-                marginBottom: 5,
-              }}
-            >
-              Número WhatsApp (com DDD)
-            </label>
-            <input
-              type="tel"
-              value={whatsappNumber}
-              onChange={(e) => setWhatsappNumber(e.target.value)}
-              style={inputStyle}
-              placeholder="+55 47 99999-9999"
-            />
-          </div>
-
-          <p style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', margin: '0 0 20px', lineHeight: 1.5 }}>
-            Informe seu número para que o administrador configure sua instância Evolution Go.
-          </p>
-
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              onClick={saveNumber}
-              disabled={saving || !whatsappNumber.trim()}
-              style={{
-                background: 'var(--ammoc-green)',
-                color: 'white',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                padding: '10px 24px',
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: saving || !whatsappNumber.trim() ? 'not-allowed' : 'pointer',
-                opacity: saving || !whatsappNumber.trim() ? 0.6 : 1,
-              }}
-            >
-              {saving ? 'Salvando...' : 'Salvar número'}
-            </button>
-
-            {editMode && (
-              <button
-                onClick={() => {
-                  setEditMode(false);
-                  setWhatsappNumber(user?.whatsapp_number ?? '');
-                }}
-                style={{
-                  background: 'var(--ammoc-paper-2)',
-                  color: 'var(--ammoc-ink-600)',
-                  border: '1px solid var(--ammoc-line-2)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '10px 20px',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
-            )}
-          </div>
-        </div>
+          )}
+        </>
       )}
 
-      {/* ── Instructions card ────────────────────────────────────────────────── */}
-      <div style={cardStyle}>
-        <h2
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 15,
-            fontWeight: 700,
-            color: 'var(--ammoc-ink-900)',
-            margin: '0 0 16px',
-          }}
-        >
-          Como funciona
-        </h2>
-        <ol style={{ margin: 0, padding: '0 0 0 4px', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[
-            { icon: '📱', text: 'Configure seu número WhatsApp nesta página' },
-            { icon: '🔗', text: 'O sistema criará uma instância no Evolution Go' },
-            { icon: '💬', text: 'Suas conversas serão capturadas e organizadas automaticamente' },
-            { icon: '📊', text: 'Acompanhe tudo no painel de Conversas' },
-          ].map((step, i) => (
-            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: '50%',
-                  background: 'var(--ammoc-green-100)',
-                  color: 'var(--ammoc-green-800)',
-                  fontSize: 11,
-                  fontWeight: 800,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                {i + 1}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 18 }}>{step.icon}</span>
-                <span style={{ fontSize: 14, color: 'var(--ammoc-ink-600)', lineHeight: 1.4 }}>
-                  {step.text}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
+      {/* ── TAB: CONVERSAS ────────────────────────────────────────────────────── */}
+      {tab === 'conversas' && (
+        <div style={card}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ammoc-ink-900)', marginBottom: 4 }}>
+            Conversas recebidas no seu WhatsApp
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', margin: '0 0 16px' }}>
+            Selecione as conversas que deseja compartilhar com a organização.
+          </p>
+
+          {convError && (
+            <div style={{ background: 'var(--ammoc-red-100)', border: '1px solid var(--ammoc-red)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontSize: 13, color: 'var(--ammoc-red-700)', marginBottom: 16 }}>
+              {convError}
+            </div>
+          )}
+
+          {conversations.length === 0 ? (
+            <div style={{ color: 'var(--ammoc-ink-400)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
+              Nenhuma conversa ainda. Conecte seu WhatsApp e aguarde mensagens.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {conversations.map(conv => (
+                <div
+                  key={conv.id}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--ammoc-line)' }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {conv.contact_name || conv.contact_number}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                      {conv.contact_number}
+                      {conv.last_message_at && ` · ${new Date(conv.last_message_at).toLocaleDateString('pt-BR')}`}
+                    </div>
+                  </div>
+                  {conv.status === 'nao_salva' ? (
+                    <button
+                      style={btn('primary')}
+                      onClick={() => handleShare(conv.id)}
+                      disabled={sharingId === conv.id}
+                    >
+                      {sharingId === conv.id ? 'Compartilhando…' : 'Compartilhar'}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: 'var(--ammoc-green-100)', color: 'var(--ammoc-green-800)' }}>
+                      Compartilhada
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
