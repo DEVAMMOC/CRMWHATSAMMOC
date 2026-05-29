@@ -32,30 +32,31 @@ export class WhatsAppService {
       throw new BadRequestException('WhatsApp já está conectado. Desconecte primeiro.');
     }
 
-    // Reuse existing token or create new one
-    const token = user.evolution_instance_token ?? randomUUID();
     const instanceName = `user-${userId}`;
 
-    let instanceId = user.evolution_instance_id;
-    if (!instanceId) {
-      const result = await this.evolution.createInstance(instanceName, token);
-      instanceId = result.id ?? result.name ?? instanceName;
-    }
+    // createOrFindInstance handles the "already exists" case gracefully —
+    // returns the real token stored in Evolution Go (may differ from DB if
+    // the instance was created in a previous session that never saved back).
+    const result = await this.evolution.createOrFindInstance(
+      instanceName,
+      user.evolution_instance_token ?? randomUUID(),
+    );
 
-    // Persist token + instanceId before connecting (so we can handle webhook)
+    // Persist the authoritative instanceId + token before connecting,
+    // so the webhook handler can identify the user when messages arrive.
     const { error: updateError } = await this.supabase
       .from('users')
       .update({
-        evolution_instance_id: instanceId,
-        evolution_instance_token: token,
+        evolution_instance_id: result.id,
+        evolution_instance_token: result.token,
         whatsapp_status: 'connecting',
       })
       .eq('id', userId);
     if (updateError) throw new Error(updateError.message);
 
-    // Webhook URL includes token as query param so we can identify the user
-    const webhookUrl = `${this.apiPublicUrl}/api/webhook/whatsapp?token=${token}`;
-    await this.evolution.connectInstance(token, webhookUrl);
+    // Webhook URL carries the token so we can look up the user on each event.
+    const webhookUrl = `${this.apiPublicUrl}/api/webhook/whatsapp?token=${result.token}`;
+    await this.evolution.connectInstance(result.token, webhookUrl);
   }
 
   async getQR(userId: string): Promise<{ base64: string }> {

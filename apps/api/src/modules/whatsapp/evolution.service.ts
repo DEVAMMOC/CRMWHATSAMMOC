@@ -24,16 +24,49 @@ export class EvolutionService {
     return { 'Content-Type': 'application/json', apikey: token };
   }
 
-  async createInstance(name: string, token: string): Promise<{ id: string; name: string }> {
+  /**
+   * Find an existing instance by name using the /instance/all endpoint.
+   * Returns id, name, and token from the Evolution Go registry.
+   */
+  private async findInstanceByName(name: string): Promise<{ id: string; name: string; token: string }> {
+    const res = await fetch(`${this.baseUrl}/instance/all`, {
+      headers: this.adminHeaders(),
+    });
+    if (!res.ok) throw new Error(`Evolution list failed: ${await res.text()}`);
+    const result = await res.json() as { data: Array<{ id: string; name: string; token: string }> };
+    const found = result.data.find(i => i.name === name);
+    if (!found) throw new Error(`Instance not found after conflict: ${name}`);
+    return { id: found.id, name: found.name, token: found.token };
+  }
+
+  /**
+   * Create an instance, or return the existing one if the name is already taken.
+   * Returns the actual token stored in Evolution Go (may differ if instance was
+   * created previously with a different token).
+   */
+  async createOrFindInstance(name: string, token: string): Promise<{ id: string; name: string; token: string }> {
     const res = await fetch(`${this.baseUrl}/instance/create`, {
       method: 'POST',
       headers: this.adminHeaders(),
       body: JSON.stringify({ name, token }),
     });
-    if (!res.ok) throw new Error(`Evolution create failed: ${await res.text()}`);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      // Gracefully handle duplicate — find and return existing instance
+      if (errText.includes('already exists')) {
+        return this.findInstanceByName(name);
+      }
+      throw new Error(`Evolution create failed: ${errText}`);
+    }
+
     // Response: { data: { id, name, token, ... }, message: "success" }
-    const result = await res.json() as { data: { id: string; name: string } };
-    return { id: result.data.id ?? result.data.name, name: result.data.name };
+    const result = await res.json() as { data: { id: string; name: string; token: string } };
+    return {
+      id: result.data.id ?? result.data.name,
+      name: result.data.name,
+      token: result.data.token ?? token,
+    };
   }
 
   async connectInstance(token: string, webhookUrl: string): Promise<void> {
