@@ -26,11 +26,12 @@ export class WebhookService {
 
   private async handleMessage(token: string, data: Record<string, unknown>): Promise<void> {
     // Find owner by instance token
-    const { data: userRow } = await this.supabase
+    const { data: userRow, error: userError } = await this.supabase
       .from('users')
       .select('id')
       .eq('evolution_instance_token', token)
       .single();
+    if (userError) { this.logger.error(`DB error looking up user by token: ${userError.message}`); return; }
 
     if (!userRow) {
       this.logger.warn(`Webhook: no user found for token ${token.slice(0, 8)}...`);
@@ -51,16 +52,33 @@ export class WebhookService {
 
     if (!remoteJid || !messageId) return;
 
+    // Skip group messages — remoteJid ends with @g.us
+    if (remoteJid.endsWith('@g.us')) {
+      this.logger.debug(`Skipping group message from ${remoteJid}`);
+      return;
+    }
+
     // Normalize contact number: strip @s.whatsapp.net / @g.us
     const contactNumber = remoteJid.split('@')[0];
 
+    // Persist messageTimestamp from the webhook payload
+    const msgTimestamp = data['messageTimestamp'] as number | undefined;
+    const sentAt = msgTimestamp
+      ? new Date(msgTimestamp * 1000).toISOString()
+      : new Date().toISOString();
+
     // Find or create conversation
-    const { data: existing } = await this.supabase
+    const { data: existing, error: convError } = await this.supabase
       .from('conversations')
       .select('id')
-      .eq('owner_user_id', userRow.id)
+      .eq('owner_user_id', (userRow as { id: string }).id)
       .eq('contact_number', contactNumber)
       .single();
+    // Note: PGRST116 means "no rows found" — that's expected, not an error
+    if (convError && convError.code !== 'PGRST116') {
+      this.logger.error(`DB error finding conversation: ${convError.message}`);
+      return;
+    }
 
     let convId: string;
 
@@ -90,16 +108,18 @@ export class WebhookService {
     }
 
     // Insert message (ignore if duplicate evolution_message_id)
-    await this.supabase.from('messages').upsert(
+    const { error: msgError } = await this.supabase.from('messages').upsert(
       {
         conversation_id: convId,
         direction,
         content: content || '[mídia]',
         message_type: 'text',
         evolution_message_id: messageId,
+        sent_at: sentAt,
       },
       { onConflict: 'evolution_message_id', ignoreDuplicates: true },
     );
+    if (msgError) this.logger.error(`DB error upserting message: ${msgError.message}`);
   }
 
   private async handleConnectionUpdate(token: string, data: Record<string, unknown>): Promise<void> {
