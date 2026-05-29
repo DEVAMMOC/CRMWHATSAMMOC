@@ -47,7 +47,7 @@ export class EvolutionService {
     const res = await fetch(`${this.baseUrl}/instance/qr`, {
       headers: this.headers(token),
     });
-    if (!res.ok) throw new Error(`Evolution QR failed: ${res.status}`);
+    if (!res.ok) throw new Error(`Evolution QR failed: ${res.status} ${await res.text()}`);
     const data = await res.json() as Record<string, unknown>;
     // Evolution Go may return { code } or { base64 }
     const base64 = (data['base64'] ?? data['code'] ?? '') as string;
@@ -69,7 +69,7 @@ export class EvolutionService {
     const res = await fetch(`${this.baseUrl}/instance/status`, {
       headers: this.headers(token),
     });
-    if (!res.ok) throw new Error(`Evolution status failed: ${res.status}`);
+    if (!res.ok) throw new Error(`Evolution status failed: ${res.status} ${await res.text()}`);
     const data = await res.json() as Record<string, unknown>;
     return { status: (data['status'] ?? data['state'] ?? 'unknown') as string };
   }
