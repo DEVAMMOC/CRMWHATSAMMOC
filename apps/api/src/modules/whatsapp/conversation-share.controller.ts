@@ -1,6 +1,6 @@
 import {
   Controller, Param, Post, UseGuards,
-  ForbiddenException, NotFoundException,
+  ForbiddenException, NotFoundException, InternalServerErrorException, Logger,
 } from '@nestjs/common';
 import type { User } from '@supabase/supabase-js';
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -11,6 +11,8 @@ import { ContextService } from './context.service';
 @Controller('conversations')
 @UseGuards(AuthGuard)
 export class ConversationShareController {
+  private readonly logger = new Logger(ConversationShareController.name);
+
   constructor(
     private readonly supabase: SupabaseClient,
     private readonly context: ContextService,
@@ -39,10 +41,15 @@ export class ConversationShareController {
       })
       .eq('id', id);
 
-    if (updateError) throw new Error(updateError.message);
+    if (updateError) {
+      this.logger.error(`Failed to share conversation ${id}: ${updateError.message}`);
+      throw new InternalServerErrorException('Erro ao compartilhar conversa');
+    }
 
-    // Generate .md async (non-blocking, errors are logged not thrown)
-    this.context.generateMd(id).catch(() => {});
+    // Generate .md async — non-blocking
+    this.context.generateMd(id).catch((err: unknown) => {
+      this.logger.error(`generateMd fire-and-forget failed for conversation ${id}`, err);
+    });
 
     return { message: 'Conversa compartilhada com a organização', status: 'pendente' };
   }

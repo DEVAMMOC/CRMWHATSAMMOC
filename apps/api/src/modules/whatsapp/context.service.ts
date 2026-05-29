@@ -21,11 +21,15 @@ export class ContextService {
     }
 
     // Fetch messages ordered by sent_at ascending
-    const { data: messages } = await this.supabase
+    const { data: messages, error: msgsError } = await this.supabase
       .from('messages')
       .select('direction, content, sent_at, message_type')
       .eq('conversation_id', conversationId)
       .order('sent_at', { ascending: true });
+
+    if (msgsError) {
+      this.logger.warn(`generateMd: could not fetch messages for ${conversationId}: ${msgsError.message}`);
+    }
 
     const ownerName: string =
       (conv.owner_user_id as unknown as { name: string } | null)?.name ?? 'N/A';
