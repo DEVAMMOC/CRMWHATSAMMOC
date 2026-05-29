@@ -15,16 +15,18 @@ export class WebhookService {
   async handleEvent(instanceToken: string, payload: EvolutionMessageEvent): Promise<void> {
     const { event, data } = payload;
 
-    if (event === 'messages.upsert' || event === 'MESSAGE') {
+    // Evolution Go uses "Message" (mixed-case); older versions use "messages.upsert" or "MESSAGE"
+    if (event === 'messages.upsert' || event === 'MESSAGE' || event === 'Message') {
       await this.handleMessage(instanceToken, data);
     } else if (event === 'connection.update') {
       await this.handleConnectionUpdate(instanceToken, data);
     } else {
-      this.logger.debug(`Unhandled webhook event: ${event}`);
+      this.logger.log(`Unhandled webhook event: ${event}`);
     }
   }
 
   private async handleMessage(token: string, data: Record<string, unknown>): Promise<void> {
+    this.logger.log(`handleMessage called — keys: ${Object.keys(data).join(', ')}`);
     // Find owner by instance token
     const { data: userRow, error: userError } = await this.supabase
       .from('users')
@@ -58,8 +60,22 @@ export class WebhookService {
       return;
     }
 
-    // Normalize contact number: strip @s.whatsapp.net / @g.us
-    const contactNumber = remoteJid.split('@')[0];
+    // Skip WhatsApp status broadcasts
+    if (remoteJid === 'status@broadcast') {
+      this.logger.debug('Skipping status@broadcast message');
+      return;
+    }
+
+    // Normalize contact number.
+    // @s.whatsapp.net  → plain phone number (e.g. "5547999168804")
+    // @lid             → WhatsApp privacy LID; we try to use a phone number from
+    //                    the pushName path. The raw LID number is kept as fallback
+    //                    so the conversation is at least created and visible.
+    const rawLocal = remoteJid.split('@')[0];
+    // LID numbers are typically large integers (>10 digits) without a "+" prefix.
+    // Real phone numbers in international format start with country code digits.
+    // We store whatever we have — LID or phone — as the contact identifier.
+    const contactNumber = rawLocal;
 
     // Persist messageTimestamp from the webhook payload
     const msgTimestamp = data['messageTimestamp'] as number | undefined;
@@ -107,7 +123,11 @@ export class WebhookService {
       },
       { onConflict: 'evolution_message_id', ignoreDuplicates: true },
     );
-    if (msgError) this.logger.error(`DB error upserting message: ${msgError.message}`);
+    if (msgError) {
+      this.logger.error(`DB error upserting message: ${msgError.message}`);
+    } else {
+      this.logger.log(`Message saved — conv:${convId} dir:${direction} contact:${contactNumber}`);
+    }
   }
 
   private async handleConnectionUpdate(token: string, data: Record<string, unknown>): Promise<void> {
