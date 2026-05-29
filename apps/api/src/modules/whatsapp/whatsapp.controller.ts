@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Get, Delete, Body, UseGuards,
+  Controller, Post, Get, Delete, Body, UseGuards, InternalServerErrorException, Logger,
 } from '@nestjs/common';
 import type { User } from '@supabase/supabase-js';
 import { AuthGuard } from '../auth/auth.guard';
@@ -10,12 +10,20 @@ import { PairDto } from './dto/pair.dto';
 @Controller('whatsapp')
 @UseGuards(AuthGuard)
 export class WhatsAppController {
+  private readonly logger = new Logger(WhatsAppController.name);
+
   constructor(private readonly whatsapp: WhatsAppService) {}
 
   @Post('connect')
   async connect(@CurrentUser() user: User) {
-    await this.whatsapp.connect(user.id);
-    return { status: 'connecting' };
+    try {
+      await this.whatsapp.connect(user.id);
+      return { status: 'connecting' };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`connect failed for ${user.id}: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
   }
 
   @Get('qr')
