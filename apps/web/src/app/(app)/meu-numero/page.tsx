@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { AppUser, Conversation } from '@crmwhats/types';
 import Image from 'next/image';
@@ -49,7 +49,9 @@ const tabBtn = (active: boolean): React.CSSProperties => ({
 // ── main component ────────────────────────────────────────────────────────────
 
 export default function MeuNumeroPage() {
-  const supabase = createClient();
+  // Fix 1: stable Supabase client reference — no re-creation on every render
+  const supabase = useMemo(() => createClient(), []);
+
   const [user, setUser] = useState<AppUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<'conexao' | 'conversas'>('conexao');
@@ -67,6 +69,7 @@ export default function MeuNumeroPage() {
 
   // Conversations tab state
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [convLoading, setConvLoading] = useState(false); // Fix 3: loading state for conversations tab
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [convError, setConvError] = useState<string | null>(null);
 
@@ -85,13 +88,15 @@ export default function MeuNumeroPage() {
       const { data } = await supabase.from('users').select('*').eq('id', uid).single();
       if (data) {
         setUser(data as AppUser);
-        setWsStatus((data as AppUser).whatsapp_status ?? 'disconnected');
+        const dbStatus = (data as AppUser).whatsapp_status ?? 'disconnected';
+        // Fix 2: if session token is missing, don't show non-disconnected status —
+        // the user can't issue API calls anyway.
+        setWsStatus(accessToken ? dbStatus : 'disconnected');
       }
       setLoading(false);
     }
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [supabase]);
 
   // ── QR polling ────────────────────────────────────────────────────────────────
   const startQrPoll = useCallback((tok: string) => {
@@ -172,6 +177,7 @@ export default function MeuNumeroPage() {
     if (tab !== 'conversas' || !user) return;
     async function load() {
       setConvError(null);
+      setConvLoading(true); // Fix 3: signal loading
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
@@ -180,10 +186,10 @@ export default function MeuNumeroPage() {
         .order('last_message_at', { ascending: false });
       if (error) setConvError(error.message);
       else setConversations((data ?? []) as Conversation[]);
+      setConvLoading(false);
     }
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, user]);
+  }, [tab, user, supabase]);
 
   async function handleShare(convId: string) {
     if (!token) return;
@@ -216,10 +222,10 @@ export default function MeuNumeroPage() {
         Conecte seu número e gerencie conversas.
       </p>
 
-      {/* Tabs */}
+      {/* Tabs — Fix 4: type="button" on all non-submit buttons */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--ammoc-line)', marginBottom: 20 }}>
-        <button style={tabBtn(tab === 'conexao')} onClick={() => setTab('conexao')}>Conexão</button>
-        <button style={tabBtn(tab === 'conversas')} onClick={() => setTab('conversas')}>Minhas Conversas</button>
+        <button type="button" style={tabBtn(tab === 'conexao')} onClick={() => setTab('conexao')}>Conexão</button>
+        <button type="button" style={tabBtn(tab === 'conversas')} onClick={() => setTab('conversas')}>Minhas Conversas</button>
       </div>
 
       {/* ── TAB: CONEXÃO ──────────────────────────────────────────────────────── */}
@@ -229,7 +235,7 @@ export default function MeuNumeroPage() {
           <div style={card}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 12, height: 12, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+                <div aria-hidden="true" style={{ width: 12, height: 12, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ammoc-ink-900)' }}>{statusLabel}</div>
                   {user?.whatsapp_number && (
@@ -239,12 +245,12 @@ export default function MeuNumeroPage() {
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {wsStatus === 'disconnected' && (
-                  <button style={btn('primary')} onClick={handleConnect} disabled={actionLoading}>
+                  <button type="button" style={btn('primary')} onClick={handleConnect} disabled={actionLoading}>
                     {actionLoading ? 'Conectando…' : 'Conectar WhatsApp'}
                   </button>
                 )}
                 {wsStatus !== 'disconnected' && (
-                  <button style={btn('danger')} onClick={handleDisconnect} disabled={actionLoading}>
+                  <button type="button" style={btn('danger')} onClick={handleDisconnect} disabled={actionLoading}>
                     Desconectar
                   </button>
                 )}
@@ -284,21 +290,23 @@ export default function MeuNumeroPage() {
 
               {/* Pairing code alternative */}
               <div style={{ marginTop: 20 }}>
-                <button style={{ ...btn('ghost'), fontSize: 12 }} onClick={() => setShowPair(p => !p)}>
+                <button type="button" style={{ ...btn('ghost'), fontSize: 12 }} onClick={() => setShowPair(p => !p)}>
                   {showPair ? 'Ocultar' : 'Usar código de pareamento'}
                 </button>
               </div>
 
               {showPair && (
                 <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  {/* Fix 4: aria-label on phone input */}
                   <input
                     type="tel"
+                    aria-label="Número de telefone para pareamento"
                     placeholder="55479999999999"
                     value={pairPhone}
                     onChange={e => setPairPhone(e.target.value)}
                     style={{ border: '1.5px solid var(--ammoc-line)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 13, fontFamily: 'var(--font-body)', background: 'var(--ammoc-paper)', color: 'var(--ammoc-ink)', outline: 'none', width: 200 }}
                   />
-                  <button style={btn('primary')} onClick={handlePair} disabled={actionLoading || !pairPhone.trim()}>
+                  <button type="button" style={btn('primary')} onClick={handlePair} disabled={actionLoading || !pairPhone.trim()}>
                     Obter código
                   </button>
                 </div>
@@ -343,7 +351,12 @@ export default function MeuNumeroPage() {
             </div>
           )}
 
-          {conversations.length === 0 ? (
+          {/* Fix 3: show loading indicator while fetching */}
+          {convLoading ? (
+            <div style={{ color: 'var(--ammoc-ink-400)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
+              Carregando conversas…
+            </div>
+          ) : conversations.length === 0 ? (
             <div style={{ color: 'var(--ammoc-ink-400)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
               Nenhuma conversa ainda. Conecte seu WhatsApp e aguarde mensagens.
             </div>
@@ -365,6 +378,7 @@ export default function MeuNumeroPage() {
                   </div>
                   {conv.status === 'nao_salva' ? (
                     <button
+                      type="button"
                       style={btn('primary')}
                       onClick={() => handleShare(conv.id)}
                       disabled={sharingId === conv.id}
