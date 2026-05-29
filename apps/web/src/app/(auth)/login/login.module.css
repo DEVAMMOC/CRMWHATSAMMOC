@@ -112,3 +112,52 @@
   color: var(--ammoc-red-700);
   margin-top: 12px;
 }
+
+/* Google OAuth button */
+.googleBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--ammoc-paper);
+  color: var(--ammoc-ink-900);
+  border: 1.5px solid var(--ammoc-line);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.googleBtn:hover {
+  border-color: var(--ammoc-ink-300);
+  background: var(--ammoc-surface);
+}
+
+.googleBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.googleIcon { flex-shrink: 0; }
+
+/* "ou entre com email" divider */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+  color: var(--ammoc-ink-400);
+  font-size: 12px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ammoc-line);
+}
+
+.divider span { white-space: nowrap; }
