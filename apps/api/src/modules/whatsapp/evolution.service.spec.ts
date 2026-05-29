@@ -17,15 +17,15 @@ describe('EvolutionService', () => {
     service = new EvolutionService(mockConfig);
     fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ id: 'inst-1', name: 'user-abc' }),
+      json: () => Promise.resolve({ data: { id: 'inst-1', name: 'user-abc', token: 'token-123' }, message: 'success' }),
       text: () => Promise.resolve(''),
     } as unknown as Response);
   });
 
   afterEach(() => { fetchSpy.mockRestore(); });
 
-  it('createInstance posts to /instance/create with apikey header', async () => {
-    const result = await service.createInstance('user-abc', 'token-123');
+  it('createOrFindInstance posts to /instance/create with global apikey', async () => {
+    const result = await service.createOrFindInstance('user-abc', 'token-123');
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://evo:8085/instance/create',
       expect.objectContaining({
@@ -34,30 +34,51 @@ describe('EvolutionService', () => {
         body: JSON.stringify({ name: 'user-abc', token: 'token-123' }),
       }),
     );
-    expect(result).toEqual({ id: 'inst-1', name: 'user-abc' });
+    expect(result).toEqual({ id: 'inst-1', name: 'user-abc', token: 'token-123' });
   });
 
-  it('getQR sends token header', async () => {
+  it('createOrFindInstance returns existing instance when name already exists', async () => {
+    // First call (create) returns 409 "already exists"
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: false,
+        text: () => Promise.resolve('{"error":"instance already exists"}'),
+      } as unknown as Response)
+      // Second call (list all) returns the existing instance
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [{ id: 'existing-id', name: 'user-abc', token: 'existing-token' }],
+          message: 'success',
+        }),
+        text: () => Promise.resolve(''),
+      } as unknown as Response);
+
+    const result = await service.createOrFindInstance('user-abc', 'new-token');
+    expect(result).toEqual({ id: 'existing-id', name: 'user-abc', token: 'existing-token' });
+  });
+
+  it('getQR sends instance token as apikey', async () => {
     fetchSpy.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ base64: 'data:image/png;base64,abc' }),
+      json: () => Promise.resolve({ data: { Qrcode: 'data:image/png;base64,abc' }, message: 'success' }),
     } as unknown as Response);
     const result = await service.getQR('tok-1');
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://evo:8085/instance/qr',
       expect.objectContaining({
-        headers: expect.objectContaining({ token: 'tok-1' }),
+        headers: expect.objectContaining({ apikey: 'tok-1' }),
       }),
     );
     expect(result.base64).toBe('data:image/png;base64,abc');
   });
 
-  it('throws when response is not ok', async () => {
+  it('throws when response is not ok (non-duplicate error)', async () => {
     fetchSpy.mockResolvedValueOnce({
       ok: false,
-      status: 401,
-      text: () => Promise.resolve('unauthorized'),
+      status: 500,
+      text: () => Promise.resolve('internal error'),
     } as unknown as Response);
-    await expect(service.createInstance('n', 't')).rejects.toThrow('Evolution create failed');
+    await expect(service.createOrFindInstance('n', 't')).rejects.toThrow('Evolution create failed');
   });
 });

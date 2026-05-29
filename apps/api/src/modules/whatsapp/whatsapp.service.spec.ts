@@ -11,12 +11,12 @@ const makeSupabase = () => {
 };
 
 const makeEvolution = () => ({
-  createInstance: jest.fn().mockResolvedValue({ id: 'inst-1', name: 'user-abc' }),
-  connectInstance: jest.fn().mockResolvedValue(undefined),
-  getQR:           jest.fn().mockResolvedValue({ base64: 'data:image/png;base64,QR' }),
-  pairInstance:    jest.fn().mockResolvedValue({ code: '12345678' }),
-  getStatus:       jest.fn().mockResolvedValue({ status: 'open' }),
-  deleteInstance:  jest.fn().mockResolvedValue(undefined),
+  createOrFindInstance: jest.fn().mockResolvedValue({ id: 'inst-1', name: 'user-abc', token: 'tok-1' }),
+  connectInstance:      jest.fn().mockResolvedValue(undefined),
+  getQR:                jest.fn().mockResolvedValue({ base64: 'data:image/png;base64,QR' }),
+  pairInstance:         jest.fn().mockResolvedValue({ code: '12345678' }),
+  getStatus:            jest.fn().mockResolvedValue({ status: 'open' }),
+  deleteInstance:       jest.fn().mockResolvedValue(undefined),
 } as unknown as EvolutionService);
 
 describe('WhatsAppService', () => {
@@ -30,25 +30,31 @@ describe('WhatsAppService', () => {
     service = new WhatsAppService(evo, supa, 'http://api.test');
   });
 
-  it('connect: creates instance and calls connectInstance', async () => {
+  it('connect: calls createOrFindInstance and connectInstance', async () => {
     (supa.from as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          single: jest.fn().mockResolvedValue({ data: { evolution_instance_token: null, evolution_instance_id: null }, error: null }),
+          single: jest.fn().mockResolvedValue({
+            data: { evolution_instance_token: null, evolution_instance_id: null, whatsapp_status: 'disconnected' },
+            error: null,
+          }),
         }),
       }),
       update: jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) }),
     });
     await service.connect('user-1');
-    expect(evo.createInstance).toHaveBeenCalled();
-    expect(evo.connectInstance).toHaveBeenCalled();
+    expect(evo.createOrFindInstance).toHaveBeenCalled();
+    expect(evo.connectInstance).toHaveBeenCalledWith('tok-1', expect.stringContaining('tok-1'));
   });
 
   it('getQR: fetches QR from EvolutionService using stored token', async () => {
     (supa.from as jest.Mock).mockReturnValue({
       select: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          single: jest.fn().mockResolvedValue({ data: { evolution_instance_token: 'tok-1', evolution_instance_id: 'inst-1' }, error: null }),
+          single: jest.fn().mockResolvedValue({
+            data: { evolution_instance_token: 'tok-1', evolution_instance_id: 'inst-1', whatsapp_status: 'connecting' },
+            error: null,
+          }),
         }),
       }),
     });
