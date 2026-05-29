@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -73,17 +74,16 @@ export default function LoginPage() {
 
   return (
     <div className={styles.card}>
-      <div className={styles.logo}>
-        <div className={styles.logoMark}>
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-            <rect x="2" y="2" width="18" height="18" rx="5" fill="white" fillOpacity="0.15"/>
-            <path d="M7 11h8M11 7v8" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <div className={styles.logoText}>
-          <h1>AMMOC</h1>
-          <p>CRMWhats</p>
-        </div>
+      <div className={styles.logoWrap}>
+        <Image
+          src="/ammoc-logo.png"
+          alt="AMMOC"
+          width={120}
+          height={120}
+          className={styles.logoImg}
+          priority
+        />
+        <p className={styles.logoSub}>CRMWhats</p>
       </div>
 
       <div className={styles.title}>Entrar</div>
