@@ -26,8 +26,17 @@ async function bootstrap() {
   const port = config.get<number>('port') ?? 3001;
   const frontendUrl = config.get<string>('frontendUrl') ?? 'http://localhost:3000';
 
+  // Accept both configured domain and common dev/transition origins
+  const allowedOrigins = [
+    frontendUrl,
+    'http://localhost:3000',
+    'http://crm.ammoc.org.br',
+    // sslip.io fallback during DNS transition
+    /^http:\/\/[a-z0-9]+\.2\.25\.139\.166\.sslip\.io$/,
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: frontendUrl,
+    origin: allowedOrigins,
     credentials: true,
   });
 
