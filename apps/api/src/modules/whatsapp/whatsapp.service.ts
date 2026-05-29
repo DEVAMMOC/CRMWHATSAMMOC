@@ -97,6 +97,41 @@ export class WhatsAppService {
     };
   }
 
+  async sendMessage(userId: string, conversationId: string, text: string): Promise<void> {
+    const user = await this.getUserRow(userId);
+    if (!user.evolution_instance_token) throw new BadRequestException('WhatsApp não está conectado');
+
+    // Resolve contact number from the conversation (RLS ensures ownership)
+    const { data: conv, error: convErr } = await this.supabase
+      .from('conversations')
+      .select('contact_number')
+      .eq('id', conversationId)
+      .single();
+    if (convErr || !conv) throw new BadRequestException('Conversa não encontrada');
+
+    const to = `${(conv as { contact_number: string }).contact_number}@s.whatsapp.net`;
+
+    // Send via Evolution Go
+    await this.evolution.sendText(user.evolution_instance_token, to, text);
+
+    const now = new Date().toISOString();
+
+    // Persist outgoing message
+    await this.supabase.from('messages').insert({
+      conversation_id: conversationId,
+      direction: 'out',
+      content: text,
+      message_type: 'text',
+      sent_at: now,
+    });
+
+    // Keep last_message_at fresh so the conversation floats to the top
+    await this.supabase
+      .from('conversations')
+      .update({ last_message_at: now })
+      .eq('id', conversationId);
+  }
+
   async disconnect(userId: string): Promise<void> {
     const user = await this.getUserRow(userId);
     if (user.evolution_instance_id) {

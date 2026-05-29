@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 type ConversationStatus = 'nao_salva' | 'pendente' | 'ativa' | 'encerrada';
@@ -65,6 +66,7 @@ export default function DashboardPage() {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const supabase = createClient();
+  const router = useRouter();
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -234,6 +236,7 @@ export default function DashboardPage() {
           {filtered.map(conv => (
             <div
               key={conv.id}
+              onClick={() => router.push(`/conversa/${conv.id}`)}
               style={{
                 background: 'var(--ammoc-paper)',
                 border: '1px solid var(--ammoc-line-2)',
@@ -244,6 +247,16 @@ export default function DashboardPage() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
+                cursor: 'pointer',
+                transition: 'border-color 0.15s, box-shadow 0.15s',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--ammoc-green)';
+                (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(0,0,0,0.1)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--ammoc-line-2)';
+                (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-card)';
               }}
             >
               {/* Icon */}
@@ -289,7 +302,7 @@ export default function DashboardPage() {
               {/* Accept button */}
               {conv.status === 'pendente' && (
                 <button
-                  onClick={() => handleAccept(conv)}
+                  onClick={e => { e.stopPropagation(); void handleAccept(conv); }}
                   disabled={acceptingId === conv.id}
                   style={{
                     background: acceptingId === conv.id ? 'var(--ammoc-line)' : 'var(--ammoc-green)',

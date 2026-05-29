@@ -115,6 +115,15 @@ export class EvolutionService {
     return { status: result.data.Connected ? 'connected' : 'disconnected' };
   }
 
+  async sendText(token: string, to: string, text: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/message/sendText`, {
+      method: 'POST',
+      headers: this.instanceHeaders(token),
+      body: JSON.stringify({ number: to, text }),
+    });
+    if (!res.ok) throw new Error(`Evolution sendText failed: ${res.status} ${await res.text()}`);
+  }
+
   async deleteInstance(instanceId: string): Promise<void> {
     const res = await fetch(`${this.baseUrl}/instance/delete/${instanceId}`, {
       method: 'DELETE',

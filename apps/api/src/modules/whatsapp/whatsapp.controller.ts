@@ -6,6 +6,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { WhatsAppService } from './whatsapp.service';
 import { PairDto } from './dto/pair.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('whatsapp')
 @UseGuards(AuthGuard)
@@ -39,6 +40,18 @@ export class WhatsAppController {
   @Get('status')
   getStatus(@CurrentUser() user: User) {
     return this.whatsapp.getStatus(user.id);
+  }
+
+  @Post('send')
+  async send(@CurrentUser() user: User, @Body() dto: SendMessageDto) {
+    try {
+      await this.whatsapp.sendMessage(user.id, dto.conversationId, dto.text);
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`send failed for ${user.id}: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
   }
 
   @Delete('disconnect')
