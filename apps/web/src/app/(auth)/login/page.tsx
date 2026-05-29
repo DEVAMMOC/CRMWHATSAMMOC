@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import styles from './login.module.css';
@@ -122,7 +123,12 @@ export default function LoginPage() {
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label} htmlFor="password">Senha</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <label className={styles.label} htmlFor="password">Senha</label>
+            <Link href="/forgot-password" style={{ fontSize: 11, color: 'var(--ammoc-green-600)', textDecoration: 'none' }}>
+              Esqueci minha senha
+            </Link>
+          </div>
           <input
             id="password"
             className={styles.input}
