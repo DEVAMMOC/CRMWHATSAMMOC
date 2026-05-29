@@ -45,14 +45,6 @@ import { ConversationShareController } from './conversation-share.controller';
         config: ConfigService,
       ) => new WhatsAppService(evo, supabase, config.get<string>('apiPublicUrl') ?? ''),
     },
-    {
-      provide: ConversationShareController,
-      inject: ['SUPABASE_CLIENT', ContextService],
-      useFactory: (
-        supabase: ReturnType<typeof createClient>,
-        context: ContextService,
-      ) => new ConversationShareController(supabase, context),
-    },
   ],
   controllers: [WhatsAppController, WebhookController, ConversationShareController],
 })

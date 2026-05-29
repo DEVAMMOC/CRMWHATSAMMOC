@@ -1,5 +1,5 @@
 import {
-  Controller, Param, Post, UseGuards,
+  Controller, Param, Post, UseGuards, Inject,
   ForbiddenException, NotFoundException, InternalServerErrorException, Logger,
 } from '@nestjs/common';
 import type { User } from '@supabase/supabase-js';
@@ -14,7 +14,7 @@ export class ConversationShareController {
   private readonly logger = new Logger(ConversationShareController.name);
 
   constructor(
-    private readonly supabase: SupabaseClient,
+    @Inject('SUPABASE_CLIENT') private readonly supabase: SupabaseClient,
     private readonly context: ContextService,
   ) {}
 
