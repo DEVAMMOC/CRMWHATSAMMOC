@@ -19,7 +19,10 @@ ALTER TABLE public.context_files
   ADD CONSTRAINT context_files_conv_type_unique
   UNIQUE (conversation_id, file_type);
 
--- 5. RLS: owner can see their own context files
+-- 5. RLS: drop old supervisor-only SELECT policy before adding the owner-inclusive one
+DROP POLICY IF EXISTS "context_files_select" ON public.context_files;
+
+-- 6. RLS: owner can see their own context files
 CREATE POLICY "context_files_owner_select" ON public.context_files FOR SELECT
   USING (
     EXISTS (

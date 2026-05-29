@@ -91,6 +91,7 @@ export interface ContextFile {
   generated_at: string;
   status: SyncStatus;
   error_message: string | null;
+  content: string | null;
 }
 
 export interface ConversationWithMessages extends Conversation {
