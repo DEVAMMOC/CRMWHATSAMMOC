@@ -3,9 +3,9 @@ import { IsString, IsNotEmpty } from 'class-validator';
 export class SendMessageDto {
   @IsString()
   @IsNotEmpty()
-  conversationId: string;
+  conversationId!: string;
 
   @IsString()
   @IsNotEmpty()
-  text: string;
+  text!: string;
 }
