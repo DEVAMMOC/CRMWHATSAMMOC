@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -11,6 +12,7 @@ import configuration from './config/configuration';
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     AuthModule,
     UsersModule,
+    WhatsAppModule,
   ],
   controllers: [AppController],
 })
