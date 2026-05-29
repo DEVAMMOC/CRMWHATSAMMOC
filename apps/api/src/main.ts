@@ -30,4 +30,7 @@ async function bootstrap() {
   logger.log(`API running on http://localhost:${port}/api`);
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('[Bootstrap] Fatal error during startup:', err);
+  process.exit(1);
+});
