@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { EvolutionService } from './evolution.service';
@@ -27,8 +28,12 @@ export class WhatsAppService {
   async connect(userId: string): Promise<void> {
     const user = await this.getUserRow(userId);
 
+    if (user.whatsapp_status === 'connected') {
+      throw new BadRequestException('WhatsApp já está conectado. Desconecte primeiro.');
+    }
+
     // Reuse existing token or create new one
-    const token = user.evolution_instance_token ?? crypto.randomUUID();
+    const token = user.evolution_instance_token ?? randomUUID();
     const instanceName = `user-${userId}`;
 
     let instanceId = user.evolution_instance_id;
@@ -82,7 +87,7 @@ export class WhatsAppService {
         // Best-effort: clear DB even if Evolution Go fails
       }
     }
-    await this.supabase
+    const { error: clearError } = await this.supabase
       .from('users')
       .update({
         evolution_instance_id: null,
@@ -90,5 +95,6 @@ export class WhatsAppService {
         whatsapp_status: 'disconnected',
       })
       .eq('id', userId);
+    if (clearError) throw new Error(clearError.message);
   }
 }
