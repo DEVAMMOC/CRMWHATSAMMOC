@@ -67,45 +67,33 @@ export class WebhookService {
       ? new Date(msgTimestamp * 1000).toISOString()
       : new Date().toISOString();
 
-    // Find or create conversation
-    const { data: existing, error: convError } = await this.supabase
+    // Upsert conversation — atomic, no read-then-write race.
+    // DB unique constraint: (owner_user_id, contact_number).
+    const { data: convRow, error: convError } = await this.supabase
       .from('conversations')
-      .select('id')
-      .eq('owner_user_id', (userRow as { id: string }).id)
-      .eq('contact_number', contactNumber)
-      .single();
-    // Note: PGRST116 means "no rows found" — that's expected, not an error
-    if (convError && convError.code !== 'PGRST116') {
-      this.logger.error(`DB error finding conversation: ${convError.message}`);
-      return;
-    }
-
-    let convId: string;
-
-    if (existing) {
-      convId = existing.id as string;
-      await this.supabase
-        .from('conversations')
-        .update({ last_message_at: new Date().toISOString() })
-        .eq('id', convId);
-    } else {
-      const { data: newConv } = await this.supabase
-        .from('conversations')
-        .insert({
-          owner_user_id: userRow.id,
+      .upsert(
+        {
+          owner_user_id: (userRow as { id: string }).id,
           contact_number: contactNumber,
           contact_name: contactNumber,
           status: 'nao_salva',
-          last_message_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
-      if (!newConv) {
-        this.logger.error('Failed to insert conversation');
-        return;
-      }
-      convId = newConv.id as string;
+          last_message_at: sentAt,
+        },
+        {
+          onConflict: 'owner_user_id,contact_number',
+          // Update last_message_at on conflict so the row stays fresh
+          ignoreDuplicates: false,
+        },
+      )
+      .select('id')
+      .single();
+
+    if (convError || !convRow) {
+      this.logger.error(`DB error upserting conversation: ${convError?.message ?? 'no row returned'}`);
+      return;
     }
+
+    const convId = convRow.id as string;
 
     // Insert message (ignore if duplicate evolution_message_id)
     const { error: msgError } = await this.supabase.from('messages').upsert(
