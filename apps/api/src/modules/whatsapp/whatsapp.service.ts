@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { EvolutionService } from './evolution.service';
 
 @Injectable()
 export class WhatsAppService {
+  private readonly logger = new Logger(WhatsAppService.name);
+
   constructor(
     private readonly evolution: EvolutionService,
     private readonly supabase: SupabaseClient,
@@ -131,6 +133,51 @@ export class WhatsAppService {
       .from('conversations')
       .update({ last_message_at: now })
       .eq('id', conversationId);
+  }
+
+  async syncConversations(userId: string): Promise<{ synced: number }> {
+    const user = await this.getUserRow(userId);
+    if (!user.evolution_instance_token) throw new BadRequestException('WhatsApp não está conectado');
+
+    const contacts = await this.evolution.getContacts(user.evolution_instance_token);
+    this.logger.log(`Sync: fetched ${contacts.length} contacts for user ${userId}`);
+
+    let synced = 0;
+    for (const contact of contacts) {
+      // Skip groups and broadcast
+      if (contact.Jid.endsWith('@g.us')) continue;
+      if (contact.Jid === 'status@broadcast') continue;
+
+      const contactNumber = contact.Jid.split('@')[0];
+      const contactName =
+        contact.FullName?.trim() ||
+        contact.PushName?.trim() ||
+        contact.BusinessName?.trim() ||
+        contactNumber;
+
+      // ignoreDuplicates: true — keeps existing status/name if the conversation already exists
+      const { error } = await this.supabase.from('conversations').upsert(
+        {
+          owner_user_id: userId,
+          contact_number: contactNumber,
+          contact_name: contactName,
+          status: 'nao_salva',
+        },
+        {
+          onConflict: 'owner_user_id,contact_number',
+          ignoreDuplicates: true,
+        },
+      );
+
+      if (error) {
+        this.logger.warn(`Sync: failed to upsert contact ${contactNumber}: ${error.message}`);
+      } else {
+        synced++;
+      }
+    }
+
+    this.logger.log(`Sync complete: ${synced}/${contacts.length} contacts upserted for user ${userId}`);
+    return { synced };
   }
 
   async disconnect(userId: string): Promise<void> {

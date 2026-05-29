@@ -54,6 +54,17 @@ export class WhatsAppController {
     }
   }
 
+  @Post('sync')
+  async sync(@CurrentUser() user: User) {
+    try {
+      return await this.whatsapp.syncConversations(user.id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`sync failed for ${user.id}: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
+  }
+
   @Delete('disconnect')
   async disconnect(@CurrentUser() user: User) {
     await this.whatsapp.disconnect(user.id);

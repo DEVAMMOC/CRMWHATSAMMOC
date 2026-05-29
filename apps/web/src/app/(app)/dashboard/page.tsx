@@ -57,6 +57,8 @@ function fmtTime(ts: string | null) {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +66,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const supabase = createClient();
   const router = useRouter();
@@ -94,6 +97,33 @@ export default function DashboardPage() {
       }
     })();
   }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${API}/api/whatsapp/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        throw new Error(err.message ?? `HTTP ${res.status}`);
+      }
+      const result = await res.json() as { synced: number };
+      // Reload conversation list after sync
+      if (currentUserId) await loadData(currentUserId);
+      alert(`Sincronizado! ${result.synced} contato(s) importado(s).`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('Erro ao sincronizar: ' + msg);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleAccept = async (conv: Conversation) => {
     if (!currentUserId) return;
@@ -167,6 +197,29 @@ export default function DashboardPage() {
         }}>
           {conversations.length}
         </span>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={() => void handleSync()}
+          disabled={syncing}
+          title="Importar todos os contatos do WhatsApp"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: syncing ? 'var(--ammoc-line)' : 'var(--ammoc-paper-2)',
+            color: syncing ? 'var(--ammoc-ink-400)' : 'var(--ammoc-ink-700)',
+            border: '1.5px solid var(--ammoc-line)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '6px 14px', fontSize: 13, fontWeight: 600,
+            cursor: syncing ? 'default' : 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          <span style={{
+            display: 'inline-block',
+            animation: syncing ? 'spin 0.8s linear infinite' : 'none',
+          }}>🔄</span>
+          {syncing ? 'Sincronizando...' : 'Sincronizar'}
+        </button>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
 
       {/* Search */}

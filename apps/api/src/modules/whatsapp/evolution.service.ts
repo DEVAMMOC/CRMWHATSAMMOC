@@ -1,6 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+export interface ContactItem {
+  Jid: string;
+  Found: boolean;
+  FirstName: string;
+  FullName: string;
+  PushName: string;
+  BusinessName: string;
+}
+
 @Injectable()
 export class EvolutionService {
   private readonly baseUrl: string;
@@ -132,5 +141,18 @@ export class EvolutionService {
       headers: this.adminHeaders(),
     });
     if (!res.ok) throw new Error(`Evolution delete failed: ${res.status}`);
+  }
+
+  /**
+   * Fetch all contacts known to this WhatsApp instance.
+   * Response: { data: [ { Jid, Found, FirstName, FullName, PushName, BusinessName } ] }
+   */
+  async getContacts(token: string): Promise<ContactItem[]> {
+    const res = await fetch(`${this.baseUrl}/user/contacts`, {
+      headers: this.instanceHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Evolution getContacts failed: ${res.status} ${await res.text()}`);
+    const result = await res.json() as { data: ContactItem[] };
+    return result.data ?? [];
   }
 }
