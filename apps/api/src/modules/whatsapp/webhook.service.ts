@@ -43,48 +43,65 @@ export class WebhookService {
       return;
     }
 
+    // Evolution Go (whatsmeow) sends { Info: {...}, Message: {...} } with capitalized
+    // top-level keys; older Evolution API (Baileys) sends { key, message, messageTimestamp }.
+    // Support both shapes. (Temporary verbose log to confirm the payload shape in prod.)
+    this.logger.log(`webhook payload: ${JSON.stringify(data).slice(0, 1500)}`);
+
+    const info = (data['Info'] ?? data['info']) as Record<string, unknown> | undefined;
+    const message = (data['Message'] ?? data['message']) as Record<string, unknown> | undefined;
     const key = data['key'] as Record<string, unknown> | undefined;
-    const message = data['message'] as Record<string, unknown> | undefined;
-    const remoteJid = (key?.['remoteJid'] ?? data['remoteJid'] ?? '') as string;
-    const messageId = (key?.['id'] ?? data['id'] ?? '') as string;
-    const fromMe = (key?.['fromMe'] ?? false) as boolean;
-    const content = (
-      (message?.['conversation'] as string | undefined) ??
-      ((message?.['extendedTextMessage'] as Record<string, unknown> | undefined)?.['text'] as string | undefined) ??
-      ''
-    );
+
+    const pick = (obj: Record<string, unknown> | undefined, ...keys: string[]): unknown => {
+      if (!obj) return undefined;
+      for (const k of keys) if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+      return undefined;
+    };
+
+    // Chat JID (conversation peer). whatsmeow: Info.Chat; Baileys: key.remoteJid.
+    const remoteJid = (pick(info, 'Chat', 'chat') ?? pick(key, 'remoteJid') ?? data['remoteJid'] ?? '') as string;
+    const messageId = (pick(info, 'ID', 'id') ?? pick(key, 'id') ?? data['id'] ?? '') as string;
+    const fromMe = (pick(info, 'IsFromMe', 'isFromMe') ?? pick(key, 'fromMe') ?? false) as boolean;
+    const pushName = (pick(info, 'PushName', 'pushName') ?? '') as string;
     const direction: 'in' | 'out' = fromMe ? 'out' : 'in';
 
-    if (!remoteJid || !messageId) return;
+    // Message content — several shapes (whatsmeow proto / Baileys).
+    const extText = pick(message, 'extendedTextMessage', 'ExtendedTextMessage') as Record<string, unknown> | undefined;
+    const imgMsg = pick(message, 'imageMessage', 'ImageMessage') as Record<string, unknown> | undefined;
+    const vidMsg = pick(message, 'videoMessage', 'VideoMessage') as Record<string, unknown> | undefined;
+    const content = (
+      (pick(message, 'conversation', 'Conversation') as string | undefined) ??
+      (pick(extText, 'text', 'Text') as string | undefined) ??
+      (pick(imgMsg, 'caption', 'Caption') as string | undefined) ??
+      (pick(vidMsg, 'caption', 'Caption') as string | undefined) ??
+      ''
+    );
 
-    // Skip group messages — remoteJid ends with @g.us
-    if (remoteJid.endsWith('@g.us')) {
-      this.logger.debug(`Skipping group message from ${remoteJid}`);
+    if (!remoteJid || !messageId) {
+      this.logger.warn(`Webhook: missing jid/id (jid='${remoteJid}', id='${messageId}') — keys: ${Object.keys(data).join(',')}`);
       return;
     }
 
-    // Skip WhatsApp status broadcasts
-    if (remoteJid === 'status@broadcast') {
-      this.logger.debug('Skipping status@broadcast message');
-      return;
+    // Skip groups, status broadcasts and newsletters
+    if (remoteJid.endsWith('@g.us')) { this.logger.debug(`Skipping group ${remoteJid}`); return; }
+    if (remoteJid === 'status@broadcast') { this.logger.debug('Skipping status broadcast'); return; }
+    if (remoteJid.endsWith('@newsletter')) { this.logger.debug('Skipping newsletter'); return; }
+
+    const contactNumber = remoteJid.split('@')[0];
+    // Use the sender's WhatsApp display name for incoming messages when available.
+    const contactName = (!fromMe && pushName) ? pushName : contactNumber;
+
+    // Timestamp — whatsmeow: Info.Timestamp (RFC3339 string); Baileys: messageTimestamp (unix sec).
+    const ts = pick(info, 'Timestamp', 'timestamp') ?? data['messageTimestamp'];
+    let sentAt: string;
+    if (typeof ts === 'number') {
+      sentAt = new Date(ts * 1000).toISOString();
+    } else if (typeof ts === 'string' && ts) {
+      const d = new Date(ts);
+      sentAt = isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+    } else {
+      sentAt = new Date().toISOString();
     }
-
-    // Normalize contact number.
-    // @s.whatsapp.net  → plain phone number (e.g. "5547999168804")
-    // @lid             → WhatsApp privacy LID; we try to use a phone number from
-    //                    the pushName path. The raw LID number is kept as fallback
-    //                    so the conversation is at least created and visible.
-    const rawLocal = remoteJid.split('@')[0];
-    // LID numbers are typically large integers (>10 digits) without a "+" prefix.
-    // Real phone numbers in international format start with country code digits.
-    // We store whatever we have — LID or phone — as the contact identifier.
-    const contactNumber = rawLocal;
-
-    // Persist messageTimestamp from the webhook payload
-    const msgTimestamp = data['messageTimestamp'] as number | undefined;
-    const sentAt = msgTimestamp
-      ? new Date(msgTimestamp * 1000).toISOString()
-      : new Date().toISOString();
 
     // Upsert conversation — atomic, no read-then-write race.
     // DB unique constraint: (owner_user_id, contact_number).
@@ -94,8 +111,9 @@ export class WebhookService {
         {
           owner_user_id: (userRow as { id: string }).id,
           contact_number: contactNumber,
-          contact_name: contactNumber,
-          status: 'nao_salva',
+          contact_name: contactName,
+          // status omitted on purpose: INSERT uses the column default ('nao_salva'),
+          // and on conflict (UPDATE) we must NOT reset a shared/delegated status.
           last_message_at: sentAt,
         },
         {
