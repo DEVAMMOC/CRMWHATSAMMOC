@@ -60,6 +60,14 @@ export default function ConversaPage() {
   // Share
   const [sharing, setSharing] = useState(false);
 
+  // Delegation
+  const [sectors, setSectors] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [sectorUsers, setSectorUsers] = useState<{ id: string; name: string }[]>([]);
+  const [showDelegate, setShowDelegate] = useState(false);
+  const [delegateSectorId, setDelegateSectorId] = useState('');
+  const [delegateUserId, setDelegateUserId] = useState('');
+  const [delegating, setDelegating] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -93,9 +101,30 @@ export default function ConversaPage() {
         setEditMunicipality(c.municipality ?? '');
       }
       if (msgData) setMessages(msgData as Message[]);
+
+      const { data: sectorData } = await supabase.from('sectors').select('id, name, color').order('name');
+      setSectors((sectorData ?? []) as { id: string; name: string; color: string }[]);
+
       setLoading(false);
     })();
   }, [id]);
+
+  // Load sector members when a sector is selected
+  useEffect(() => {
+    if (!delegateSectorId) { setSectorUsers([]); setDelegateUserId(''); return; }
+    void supabase
+      .from('sector_members')
+      .select('user_id, users(id, name)')
+      .eq('sector_id', delegateSectorId)
+      .then(({ data }) => {
+        const rows = (data ?? []) as { users: { id: string; name: string } | { id: string; name: string }[] | null }[];
+        setSectorUsers(
+          rows
+            .map(m => (Array.isArray(m.users) ? m.users[0] : m.users))
+            .filter((u): u is { id: string; name: string } => !!u),
+        );
+      });
+  }, [delegateSectorId, supabase]);
 
   // Scroll to bottom when messages load or change
   useEffect(() => {
@@ -210,6 +239,41 @@ export default function ConversaPage() {
       setError(msg);
     } finally {
       setSharing(false);
+    }
+  };
+
+  const handleDelegate = async () => {
+    if (!conv || (!delegateSectorId && !delegateUserId)) return;
+    setDelegating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${API}/api/conversations/${conv.id}/delegate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({
+          sectorId: delegateSectorId || undefined,
+          assignedTo: delegateUserId || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(body.message ?? 'Erro ao delegar');
+      }
+      setShowDelegate(false);
+      const { data: updated } = await supabase
+        .from('conversations')
+        .select('id, contact_number, contact_name, status, municipality')
+        .eq('id', conv.id)
+        .single();
+      if (updated) setConv(updated as Conversation);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    } finally {
+      setDelegating(false);
     }
   };
 
@@ -330,6 +394,22 @@ export default function ConversaPage() {
               {conv?.status ?? '—'}
             </div>
           )}
+
+          {/* Delegate button */}
+          <button
+            onClick={() => setShowDelegate(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: 'var(--ammoc-paper-2)',
+              border: '1.5px solid var(--ammoc-line)',
+              color: 'var(--ammoc-ink-700)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '5px 12px', fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            🏛️ Delegar
+          </button>
 
           {/* Contact info toggle */}
           <button
@@ -639,6 +719,40 @@ export default function ConversaPage() {
           ) : '➤'}
         </button>
       </div>
+
+      {/* Delegation modal */}
+      {showDelegate && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--ammoc-paper)', borderRadius: 'var(--radius)', padding: 28, width: 400, boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+            <h2 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 800 }}>Delegar conversa</h2>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ammoc-ink-600)', display: 'block', marginBottom: 4 }}>Setor</label>
+              <select value={delegateSectorId} onChange={e => setDelegateSectorId(e.target.value)}
+                style={{ width: '100%', border: '1.5px solid var(--ammoc-line)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' }}>
+                <option value="">Selecione um setor…</option>
+                {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            {sectorUsers.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ammoc-ink-600)', display: 'block', marginBottom: 4 }}>Funcionário (opcional)</label>
+                <select value={delegateUserId} onChange={e => setDelegateUserId(e.target.value)}
+                  style={{ width: '100%', border: '1.5px solid var(--ammoc-line)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' }}>
+                  <option value="">Qualquer membro do setor</option>
+                  {sectorUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowDelegate(false)} style={{ background: 'var(--ammoc-paper-2)', border: '1px solid var(--ammoc-line)', color: 'var(--ammoc-ink-600)', borderRadius: 'var(--radius-sm)', padding: '8px 18px', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={() => void handleDelegate()} disabled={delegating || (!delegateSectorId && !delegateUserId)}
+                style={{ background: 'var(--ammoc-green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 18px', fontSize: 13, fontWeight: 700, cursor: delegating ? 'default' : 'pointer', opacity: (!delegateSectorId && !delegateUserId) ? 0.5 : 1 }}>
+                {delegating ? 'Delegando…' : 'Confirmar delegação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
