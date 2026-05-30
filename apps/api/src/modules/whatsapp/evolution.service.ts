@@ -161,6 +161,25 @@ export class EvolutionService {
    * Evolution Go sends the messages back as MESSAGE webhook events.
    * This is fire-and-forget — the response just confirms the request was sent.
    */
+  /**
+   * Get the WhatsApp profile picture URL for a contact.
+   * Returns null if no avatar or instance not connected.
+   */
+  async getContactAvatar(token: string, number: string): Promise<string | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/user/avatar`, {
+        method: 'POST',
+        headers: this.instanceHeaders(token),
+        body: JSON.stringify({ number }),
+      });
+      if (!res.ok) return null;
+      const result = await res.json() as { data?: { profilePicUrl?: string; url?: string } };
+      return result.data?.profilePicUrl ?? result.data?.url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async requestChatHistory(token: string, jid: string, count = 50): Promise<void> {
     const res = await fetch(`${this.baseUrl}/chat/history-sync-request`, {
       method: 'POST',

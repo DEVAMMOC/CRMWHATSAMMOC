@@ -1,10 +1,11 @@
 import {
-  Controller, Post, Get, Delete, Body, UseGuards, InternalServerErrorException, Logger,
+  Controller, Post, Get, Delete, Body, Query, UseGuards, InternalServerErrorException, Logger,
 } from '@nestjs/common';
 import type { User } from '@supabase/supabase-js';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { WhatsAppService } from './whatsapp.service';
+import { EvolutionService } from './evolution.service';
 import { PairDto } from './dto/pair.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
@@ -13,7 +14,10 @@ import { SendMessageDto } from './dto/send-message.dto';
 export class WhatsAppController {
   private readonly logger = new Logger(WhatsAppController.name);
 
-  constructor(private readonly whatsapp: WhatsAppService) {}
+  constructor(
+    private readonly whatsapp: WhatsAppService,
+    private readonly evolution: EvolutionService,
+  ) {}
 
   @Post('connect')
   async connect(@CurrentUser() user: User) {
@@ -62,6 +66,20 @@ export class WhatsAppController {
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.error(`sync failed for ${user.id}: ${msg}`);
       throw new InternalServerErrorException(msg);
+    }
+  }
+
+  /** GET /api/whatsapp/avatar?number=554799168804 — proxies WhatsApp profile photo */
+  @Get('avatar')
+  async getAvatar(@CurrentUser() user: User, @Query('number') number: string) {
+    if (!number) return { url: null };
+    try {
+      const userRow = await this.whatsapp.getUserRow(user.id);
+      if (!userRow.evolution_instance_token) return { url: null };
+      const url = await this.evolution.getContactAvatar(userRow.evolution_instance_token, number);
+      return { url };
+    } catch {
+      return { url: null };
     }
   }
 

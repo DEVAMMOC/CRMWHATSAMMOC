@@ -13,7 +13,7 @@ export class WhatsAppService {
     private readonly apiPublicUrl: string,
   ) {}
 
-  private async getUserRow(userId: string) {
+  async getUserRow(userId: string) {
     const { data, error } = await this.supabase
       .from('users')
       .select('evolution_instance_id, evolution_instance_token, whatsapp_status')

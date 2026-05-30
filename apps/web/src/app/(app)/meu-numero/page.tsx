@@ -74,6 +74,13 @@ export default function MeuNumeroPage() {
   const [convError, setConvError] = useState<string | null>(null);
   const [convSearch, setConvSearch] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // Map: conversation_id → { content, direction }
+  const [lastMsgs, setLastMsgs] = useState<Record<string, { content: string; direction: string }>>({});
+  // Map: contact_number → avatar URL (null = no photo)
+  const [avatars, setAvatars] = useState<Record<string, string | null>>({});
+  // Sync state (for header button)
+  const [convSyncing, setConvSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // ── Load user + session ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -182,23 +189,70 @@ export default function MeuNumeroPage() {
     setActionLoading(false);
   }
 
-  // ── Load conversations ────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (tab !== 'conversas' || !user) return;
-    async function load() {
-      setConvError(null);
-      setConvLoading(true); // Fix 3: signal loading
-      const { data, error } = await supabase
-        .from('conversations')
-        .select('*')
-        .eq('owner_user_id', user!.id)
-        .order('last_message_at', { ascending: false, nullsFirst: false });
-      if (error) setConvError(error.message);
-      else setConversations((data ?? []) as Conversation[]);
-      setConvLoading(false);
+  // ── Load conversations + last messages ───────────────────────────────────────
+  const loadConversations = useCallback(async () => {
+    if (!user) return;
+    setConvError(null);
+    setConvLoading(true);
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('owner_user_id', user.id)
+      .order('last_message_at', { ascending: false, nullsFirst: false });
+    if (error) { setConvError(error.message); setConvLoading(false); return; }
+    const convs = (data ?? []) as Conversation[];
+    setConversations(convs);
+    setConvLoading(false);
+
+    // Load last message per conversation via Postgres function
+    if (convs.length > 0) {
+      const ids = convs.map(c => c.id);
+      const { data: msgs } = await supabase.rpc('get_last_messages', { conv_ids: ids });
+      if (msgs) {
+        const map: Record<string, { content: string; direction: string }> = {};
+        for (const m of msgs as { conversation_id: string; content: string; direction: string }[]) {
+          map[m.conversation_id] = { content: m.content, direction: m.direction };
+        }
+        setLastMsgs(map);
+      }
     }
-    load();
-  }, [tab, user, supabase]);
+  }, [user, supabase]);
+
+  useEffect(() => {
+    if (tab === 'conversas') void loadConversations();
+  }, [tab, loadConversations]);
+
+  // ── Lazy-load avatars (first 30 visible contacts) ────────────────────────────
+  useEffect(() => {
+    if (!token || conversations.length === 0) return;
+    const unloaded = conversations.filter(c => !(c.contact_number in avatars)).slice(0, 30);
+    if (unloaded.length === 0) return;
+    void (async () => {
+      for (const conv of unloaded) {
+        try {
+          const data = await apiFetch(`/api/whatsapp/avatar?number=${conv.contact_number}`, token);
+          setAvatars(prev => ({ ...prev, [conv.contact_number]: (data as { url: string | null }).url }));
+        } catch {
+          setAvatars(prev => ({ ...prev, [conv.contact_number]: null }));
+        }
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations, token]);
+
+  async function handleConvSync() {
+    if (!token) return;
+    setConvSyncing(true);
+    setSyncMsg(null);
+    try {
+      const result = await apiFetch('/api/whatsapp/sync', token, { method: 'POST', body: '{}' }) as { synced: number; historyRequested: number };
+      await loadConversations();
+      setSyncMsg({ ok: true, text: `✅ ${result.synced} conversa(s) importada(s). Histórico solicitado para ${result.historyRequested}.` });
+    } catch (e: unknown) {
+      setSyncMsg({ ok: false, text: `❌ ${e instanceof Error ? e.message : String(e)}` });
+    }
+    setConvSyncing(false);
+  }
 
   async function handleShare(convId: string) {
     if (!token) return;
@@ -348,14 +402,41 @@ export default function MeuNumeroPage() {
       {tab === 'conversas' && (
         <div style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
 
-          {/* WhatsApp-style header with search */}
+          {/* Header with sync button */}
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--ammoc-line-2)', background: 'var(--ammoc-paper-2)' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', marginBottom: 10 }}>
-              Minhas conversas
-              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, background: 'var(--ammoc-line-2)', color: 'var(--ammoc-ink-400)', padding: '2px 8px', borderRadius: 99 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)' }}>Minhas conversas</span>
+              <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--ammoc-line-2)', color: 'var(--ammoc-ink-400)', padding: '2px 8px', borderRadius: 99 }}>
                 {conversations.length}
               </span>
+              <div style={{ flex: 1 }} />
+              {/* Sync button — top right */}
+              <button
+                type="button"
+                onClick={() => void handleConvSync()}
+                disabled={convSyncing}
+                title="Sincronizar conversas do WhatsApp"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: convSyncing ? 'var(--ammoc-paper)' : 'var(--ammoc-green)',
+                  color: convSyncing ? 'var(--ammoc-green)' : 'white',
+                  border: `1.5px solid ${convSyncing ? 'var(--ammoc-green)' : 'transparent'}`,
+                  borderRadius: 'var(--radius-sm)', padding: '5px 12px',
+                  fontSize: 12, fontWeight: 700, cursor: convSyncing ? 'default' : 'pointer',
+                }}
+              >
+                <span style={{ display: 'inline-block', animation: convSyncing ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
+                {convSyncing ? 'Sincronizando…' : 'Sincronizar'}
+              </button>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
+
+            {syncMsg && (
+              <div style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, marginBottom: 8, background: syncMsg.ok ? 'var(--ammoc-green-100)' : '#fef2f2', color: syncMsg.ok ? 'var(--ammoc-green-800)' : '#b91c1c', border: `1px solid ${syncMsg.ok ? 'var(--ammoc-green)' : '#fca5a5'}` }}>
+                {syncMsg.text}
+              </div>
+            )}
+
             <input
               type="text"
               placeholder="🔍  Pesquisar conversa..."
@@ -437,14 +518,32 @@ export default function MeuNumeroPage() {
                         transition: 'background 0.1s', cursor: 'default', position: 'relative',
                       }}
                     >
-                      {/* Avatar */}
-                      <div style={{ width: 46, height: 46, borderRadius: '50%', background: avatarColor, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em' }}>
-                        {initials || '?'}
+                      {/* Avatar — photo if available, else colored initials */}
+                      <div style={{ width: 46, height: 46, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+                        {avatars[conv.contact_number] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={avatars[conv.contact_number]!}
+                            alt={name}
+                            style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: '50%' }}
+                            onError={() => setAvatars(prev => ({ ...prev, [conv.contact_number]: null }))}
+                          />
+                        ) : avatars[conv.contact_number] === undefined ? (
+                          // Still loading — show spinner placeholder
+                          <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'var(--ammoc-line-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{ width: 16, height: 16, border: '2px solid var(--ammoc-line)', borderTopColor: 'var(--ammoc-green)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                          </div>
+                        ) : (
+                          // null = no photo — show colored initials
+                          <div style={{ width: 46, height: 46, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 16, fontWeight: 700 }}>
+                            {initials || '?'}
+                          </div>
+                        )}
                       </div>
 
                       {/* Info */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>
                           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                             {name}
                           </span>
@@ -452,9 +551,12 @@ export default function MeuNumeroPage() {
                             {fmtTime(conv.last_message_at)}
                           </span>
                         </div>
+                        {/* Last message preview or "Sem histórico" */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                            {conv.contact_number}
+                          <span style={{ fontSize: 12, color: lastMsgs[conv.id] ? 'var(--ammoc-ink-500)' : 'var(--ammoc-ink-300)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontStyle: lastMsgs[conv.id] ? 'normal' : 'italic' }}>
+                            {lastMsgs[conv.id]
+                              ? `${lastMsgs[conv.id].direction === 'out' ? '✓ ' : ''}${lastMsgs[conv.id].content}`
+                              : 'Sem histórico'}
                           </span>
                           {badge && (
                             <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: badge.bg, color: badge.color, flexShrink: 0 }}>
