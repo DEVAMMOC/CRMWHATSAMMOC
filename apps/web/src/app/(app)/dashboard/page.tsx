@@ -80,9 +80,12 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
+    // O painel mostra apenas conversas compartilhadas/delegadas com a organização
+    // (pendente/ativa/encerrada) — nunca a agenda privada do funcionário ('nao_salva').
     const { data, error } = await supabase
       .from('conversations')
       .select('*')
+      .neq('status', 'nao_salva')
       .order('last_message_at', { ascending: false });
 
     if (error) {
