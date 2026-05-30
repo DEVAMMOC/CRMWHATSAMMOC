@@ -5,6 +5,13 @@ import { createClient } from '@/lib/supabase/client';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? '';
 
+function mediaTypeFromMime(mime: string): 'image' | 'video' | 'audio' | 'document' {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'document';
+}
+
 interface Message {
   id: string;
   conversation_id: string;
@@ -31,6 +38,8 @@ export function ConversationPanel({ conversationId, contactName, contactNumber, 
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const loadMessages = useCallback(async () => {
@@ -72,6 +81,35 @@ export function ConversationPanel({ conversationId, contactName, contactNumber, 
       setText(body);
     }
     setSending(false);
+  }
+
+  async function handleFile(file: File) {
+    if (!token) return;
+    if (file.size > 26214400) { setError('Arquivo excede 25 MB'); return; }
+    setUploading(true); setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) throw new Error('Sessão expirada');
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${uid}/${conversationId}/${Date.now()}-${safe}`;
+      const up = await supabase.storage.from('wa-media').upload(path, file, { contentType: file.type, upsert: false });
+      if (up.error) throw new Error(up.error.message);
+      const { data: pub } = supabase.storage.from('wa-media').getPublicUrl(path);
+      const mediaUrl = pub.publicUrl;
+      const mediaType = mediaTypeFromMime(file.type);
+      const res = await fetch(`${API}/api/whatsapp/send-media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ conversationId, mediaUrl, mediaType, fileName: file.name, caption: text.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setText('');
+      await loadMessages();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao enviar mídia');
+    }
+    setUploading(false);
   }
 
   const initials = contactName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -129,6 +167,16 @@ export function ConversationPanel({ conversationId, contactName, contactNumber, 
       {error && <div style={{ padding: '6px 16px', fontSize: 12, color: '#b91c1c', background: '#fef2f2' }}>{error}</div>}
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--ammoc-line-2)', background: 'var(--ammoc-paper-2)' }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,audio/*,application/pdf,application/*"
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }}
+        />
+        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Anexar mídia" style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 16, cursor: uploading ? 'default' : 'pointer', flexShrink: 0 }}>
+          {uploading ? '…' : '📎'}
+        </button>
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
