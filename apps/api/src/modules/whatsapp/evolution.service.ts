@@ -167,10 +167,13 @@ export class EvolutionService {
    */
   async getContactAvatar(token: string, number: string): Promise<string | null> {
     try {
+      // Evolution Go exige o JID completo; com número puro a query de perfil dá timeout.
+      const digits = number.replace(/\D/g, '');
+      const jid = `${digits}@s.whatsapp.net`;
       const res = await fetch(`${this.baseUrl}/user/avatar`, {
         method: 'POST',
         headers: this.instanceHeaders(token),
-        body: JSON.stringify({ number }),
+        body: JSON.stringify({ number: jid }),
       });
       if (!res.ok) return null;
       const result = await res.json() as { data?: { profilePicUrl?: string; url?: string } };
