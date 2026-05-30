@@ -1,6 +1,6 @@
 import {
   Controller, Param, Post, Body, UseGuards, Inject,
-  ForbiddenException, NotFoundException, InternalServerErrorException, Logger,
+  ForbiddenException, NotFoundException, InternalServerErrorException, BadRequestException, Logger,
 } from '@nestjs/common';
 import type { User } from '@supabase/supabase-js';
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -69,6 +69,28 @@ export class ConversationShareController {
 
     if (error || !conv) throw new NotFoundException('Conversa não encontrada');
 
+    // Authorization: admin/supervisor can delegate any conversation;
+    // a regular employee may only delegate conversations they own.
+    const { data: me } = await this.supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (me?.role !== 'admin' && me?.role !== 'supervisor' && conv.owner_user_id !== user.id) {
+      throw new ForbiddenException('Sem permissão para delegar esta conversa');
+    }
+
+    // When delegating to a specific user within a sector, ensure membership.
+    if (dto.sectorId && dto.assignedTo) {
+      const { data: membership } = await this.supabase
+        .from('sector_members')
+        .select('user_id')
+        .eq('sector_id', dto.sectorId)
+        .eq('user_id', dto.assignedTo)
+        .maybeSingle();
+      if (!membership) throw new BadRequestException('Usuário não pertence ao setor');
+    }
+
     const updates: Record<string, unknown> = {
       delegated_at: new Date().toISOString(),
       delegated_by: user.id,
@@ -84,6 +106,9 @@ export class ConversationShareController {
 
     if (updateError) {
       this.logger.error(`Failed to delegate conversation ${id}: ${updateError.message}`);
+      if ((updateError as { code?: string }).code === '23503') {
+        throw new BadRequestException('Setor ou usuário informado não existe');
+      }
       throw new InternalServerErrorException('Erro ao delegar conversa');
     }
 
