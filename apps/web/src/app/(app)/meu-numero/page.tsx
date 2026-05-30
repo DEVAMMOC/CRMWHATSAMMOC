@@ -193,10 +193,14 @@ export default function MeuNumeroPage() {
     if (!user) return;
     setConvError(null);
     setConvLoading(true);
+    // Mostrar apenas conversas com atividade real (mensagem recebida/enviada — o webhook
+    // seta last_message_at) ou que foram explicitamente compartilhadas/delegadas.
+    // A agenda importada sem histórico (last_message_at nulo, status 'nao_salva') fica oculta.
     const { data, error } = await supabase
       .from('conversations')
       .select('*')
       .eq('owner_user_id', user.id)
+      .or('last_message_at.not.is.null,status.neq.nao_salva')
       .order('last_message_at', { ascending: false, nullsFirst: false });
     if (error) { setConvError(error.message); setConvLoading(false); return; }
     const convs = (data ?? []) as Conversation[];
