@@ -135,6 +135,50 @@ export class WhatsAppService {
       .eq('id', conversationId);
   }
 
+  async sendMediaMessage(
+    userId: string,
+    conversationId: string,
+    mediaUrl: string,
+    mediaType: 'image' | 'video' | 'audio' | 'document',
+    fileName: string,
+    caption?: string,
+  ): Promise<void> {
+    const user = await this.getUserRow(userId);
+    if (!user.evolution_instance_token) throw new BadRequestException('WhatsApp não está conectado');
+
+    // Resolve contact number from the conversation (RLS ensures ownership)
+    const { data: conv, error: convErr } = await this.supabase
+      .from('conversations')
+      .select('contact_number')
+      .eq('id', conversationId)
+      .single();
+    if (convErr || !conv) throw new BadRequestException('Conversa não encontrada');
+
+    // Evolution Go will format the JID (formatJid: true in sendMedia)
+    const to = (conv as { contact_number: string }).contact_number;
+
+    // Send via Evolution Go
+    await this.evolution.sendMedia(user.evolution_instance_token, to, mediaUrl, mediaType, fileName, caption);
+
+    const now = new Date().toISOString();
+
+    // Persist outgoing media message — mirrors sendMessage's shape, plus media_url
+    await this.supabase.from('messages').insert({
+      conversation_id: conversationId,
+      direction: 'out',
+      content: caption || fileName,
+      message_type: mediaType,
+      media_url: mediaUrl,
+      sent_at: now,
+    });
+
+    // Keep last_message_at fresh so the conversation floats to the top
+    await this.supabase
+      .from('conversations')
+      .update({ last_message_at: now })
+      .eq('id', conversationId);
+  }
+
   async syncConversations(userId: string): Promise<{ synced: number; historyRequested: number }> {
     const user = await this.getUserRow(userId);
     if (!user.evolution_instance_token) throw new BadRequestException('WhatsApp não está conectado');

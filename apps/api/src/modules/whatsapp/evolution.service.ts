@@ -135,6 +135,29 @@ export class EvolutionService {
     if (!res.ok) throw new Error(`Evolution sendText failed: ${res.status} ${await res.text()}`);
   }
 
+  async sendMedia(
+    token: string,
+    to: string,
+    mediaUrl: string,
+    mediaType: 'image' | 'video' | 'audio' | 'document',
+    fileName: string,
+    caption?: string,
+  ): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/send/media`, {
+      method: 'POST',
+      headers: this.instanceHeaders(token),
+      body: JSON.stringify({
+        number: to,
+        mediatype: mediaType,
+        media: mediaUrl,
+        fileName,
+        caption: caption ?? '',
+        formatJid: true,
+      }),
+    });
+    if (!res.ok) throw new Error(`Evolution sendMedia failed: ${res.status} ${await res.text()}`);
+  }
+
   async deleteInstance(instanceId: string): Promise<void> {
     const res = await fetch(`${this.baseUrl}/instance/delete/${instanceId}`, {
       method: 'DELETE',

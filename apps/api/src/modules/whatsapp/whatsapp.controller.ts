@@ -8,6 +8,7 @@ import { WhatsAppService } from './whatsapp.service';
 import { EvolutionService } from './evolution.service';
 import { PairDto } from './dto/pair.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { SendMediaDto } from './dto/send-media.dto';
 
 @Controller('whatsapp')
 @UseGuards(AuthGuard)
@@ -54,6 +55,18 @@ export class WhatsAppController {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.error(`send failed for ${user.id}: ${msg}`);
+      throw new InternalServerErrorException(msg);
+    }
+  }
+
+  @Post('send-media')
+  async sendMedia(@CurrentUser() user: User, @Body() dto: SendMediaDto) {
+    try {
+      await this.whatsapp.sendMediaMessage(user.id, dto.conversationId, dto.mediaUrl, dto.mediaType, dto.fileName, dto.caption);
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error(`send-media failed for ${user.id}: ${msg}`);
       throw new InternalServerErrorException(msg);
     }
   }
