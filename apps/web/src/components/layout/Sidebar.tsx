@@ -2,6 +2,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { AppUser } from '@crmwhats/types';
@@ -74,12 +75,14 @@ export default function Sidebar({ user }: SidebarProps) {
   return (
     <nav className={styles.sidebar}>
       <div className={styles.brand}>
-        <div className={styles.logoMark}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <rect x="2" y="2" width="16" height="16" rx="4" fill="var(--ammoc-green-800)"/>
-            <path d="M6 10h8M10 6v8" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
+        <Image
+          src="/ammoc-logo.png"
+          alt="AMMOC"
+          width={40}
+          height={40}
+          className={styles.logoImg}
+          priority
+        />
         <div>
           <div className={styles.brandName}>AMMOC</div>
           <div className={styles.brandSub}>CRMWhats</div>
