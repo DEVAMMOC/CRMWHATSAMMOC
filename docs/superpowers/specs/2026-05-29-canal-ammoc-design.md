@@ -295,6 +295,53 @@ Na tela de edição de perfil (`/configuracoes`) e na listagem de equipe (`/equi
 
 ---
 
+## Gatilhos de Encerramento de Atendimento
+
+A interceptação de mensagens do funcionário pela bridge Evolution↔Meta é ativa
+**somente enquanto** `canal_conversations.status = 'human'`. Ao encerrar, o sistema
+para imediatamente de redirecionar as mensagens daquele funcionário para aquele cidadão.
+
+### Gatilhos que encerram a conversa
+
+| Gatilho | Descrição |
+|---------|-----------|
+| **Manual CRM** | Funcionário, admin ou supervisor clica "Encerrar" na tela do canal |
+| **Palavra-chave WhatsApp** | Funcionário envia `/fechar` ou `#ok` no chat pessoal com o cidadão delegado |
+| **Timeout inatividade** | Configurável (padrão: 3 dias sem mensagens) → encerra automaticamente |
+| **Bot retoma** | Cidadão envia nova mensagem após encerramento → bot assume novamente |
+
+### Ações ao encerrar
+
+1. `canal_conversations.status = 'closed'`, `closed_at = now()`
+2. Bridge para de interceptar mensagens desse par (funcionário ↔ cidadão)
+3. Mensagem registrada: `canal_messages(direction='out', sent_by=null, content='[Atendimento encerrado]')`
+4. Notificação Evolution para o funcionário: *"✅ Atendimento com [nome cidadão] encerrado."*
+5. Opcionalmente: mensagem automática ao cidadão via Meta API: *"Seu atendimento foi concluído. Obrigado!"*
+
+### Novo campo na tabela `canal_conversations`
+
+```sql
+ALTER TABLE canal_conversations
+  ADD COLUMN closed_at timestamptz,
+  ADD COLUMN closed_by uuid REFERENCES users(id),  -- null = automático/timeout
+  ADD COLUMN close_reason text;
+  -- 'manual_crm' | 'keyword' | 'timeout' | 'bot_resumed'
+```
+
+### Timeout automático — job agendado
+
+```
+CronJob — roda a cada hora:
+  SELECT * FROM canal_conversations
+  WHERE status = 'human'
+    AND last_message_at < now() - INTERVAL '{timeout_days} days'
+  → encerra cada uma com close_reason = 'timeout'
+```
+
+O `timeout_days` é configurável em `bot_config` (campo `inactivity_timeout_days`, padrão 3).
+
+---
+
 ## Bridge Evolution ↔ Meta — Fase 3
 
 Quando um funcionário responde via WhatsApp pessoal:
