@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { AppUser, Conversation } from '@crmwhats/types';
 import Image from 'next/image';
+import { ConversationPanel } from './ConversationPanel';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,7 @@ export default function MeuNumeroPage() {
   const [convError, setConvError] = useState<string | null>(null);
   const [convSearch, setConvSearch] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   // Map: conversation_id → { content, direction }
   const [lastMsgs, setLastMsgs] = useState<Record<string, { content: string; direction: string }>>({});
   // Map: contact_number → avatar URL (null = no photo)
@@ -276,7 +278,7 @@ export default function MeuNumeroPage() {
   const statusLabel = wsStatus === 'connected' ? 'Conectado' : wsStatus === 'connecting' ? 'Conectando…' : 'Desconectado';
 
   return (
-    <div style={{ padding: '32px', flex: 1, maxWidth: 800 }}>
+    <div style={{ padding: '32px', flex: 1, maxWidth: tab === 'conversas' ? 'none' : 800, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Header */}
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--ammoc-ink-900)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
         Meu Número WhatsApp
@@ -400,7 +402,9 @@ export default function MeuNumeroPage() {
 
       {/* ── TAB: CONVERSAS ────────────────────────────────────────────────────── */}
       {tab === 'conversas' && (
-        <div style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, height: 'calc(100vh - 200px)' }}>
+        {/* LEFT column — conversation list */}
+        <div style={{ width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
 
           {/* Header with sync button */}
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--ammoc-line-2)', background: 'var(--ammoc-paper-2)' }}>
@@ -452,7 +456,8 @@ export default function MeuNumeroPage() {
             </div>
           )}
 
-          {/* Conversation list */}
+          {/* Conversation list — scrolling region */}
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {convLoading ? (
             <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--ammoc-ink-400)', fontSize: 13 }}>
               <div style={{ width: 24, height: 24, border: '3px solid var(--ammoc-line-2)', borderTopColor: 'var(--ammoc-green)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 10px' }} />
@@ -509,13 +514,14 @@ export default function MeuNumeroPage() {
                   return (
                     <div
                       key={conv.id}
+                      onClick={() => setSelectedConvId(conv.id)}
                       onMouseEnter={() => setHoveredId(conv.id)}
                       onMouseLeave={() => setHoveredId(null)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
                         borderBottom: '1px solid var(--ammoc-line-2)',
-                        background: isHovered ? 'var(--ammoc-paper-2)' : 'transparent',
-                        transition: 'background 0.1s', cursor: 'default', position: 'relative',
+                        background: selectedConvId === conv.id ? 'var(--ammoc-green-100)' : (isHovered ? 'var(--ammoc-paper-2)' : 'transparent'),
+                        transition: 'background 0.1s', cursor: 'pointer', position: 'relative',
                       }}
                     >
                       {/* Avatar — photo if available, else colored initials */}
@@ -577,7 +583,7 @@ export default function MeuNumeroPage() {
                           <button
                             type="button"
                             disabled={sharingId === conv.id}
-                            onClick={() => void handleShare(conv.id)}
+                            onClick={(e) => { e.stopPropagation(); void handleShare(conv.id); }}
                             title="Compartilhar com a organização"
                             style={{
                               display: 'flex', alignItems: 'center', gap: 5,
@@ -606,6 +612,31 @@ export default function MeuNumeroPage() {
               </div>
             );
           })()}
+          </div>
+        </div>
+
+        {/* RIGHT column — conversation panel */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--ammoc-paper)' }}>
+          {selectedConvId ? (() => {
+            const sel = conversations.find(c => c.id === selectedConvId);
+            if (!sel) return null;
+            return (
+              <ConversationPanel
+                conversationId={sel.id}
+                contactName={sel.contact_name || sel.contact_number}
+                contactNumber={sel.contact_number}
+                avatarUrl={avatars[sel.contact_number] ?? null}
+                token={token}
+                onBack={() => setSelectedConvId(null)}
+              />
+            );
+          })() : (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ammoc-ink-400)', fontSize: 14, flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 40 }}>💬</div>
+              Selecione uma conversa
+            </div>
+          )}
+        </div>
         </div>
       )}
     </div>
