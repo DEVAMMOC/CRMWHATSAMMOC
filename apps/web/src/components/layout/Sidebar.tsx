@@ -32,6 +32,11 @@ const ORG_NAV: NavItem[] = [
   { icon: '👥', label: 'Equipe', href: '/equipe' },
 ];
 
+const CANAL_NAV: NavItem[] = [
+  { icon: '📡', label: 'Canal AMMOC', href: '/canal' },
+  { icon: '⚙️', label: 'Canal — Config', href: '/canal/config' },
+];
+
 const ADMIN_NAV: NavItem[] = [
   { icon: '📊', label: 'Painel Admin', href: '/admin' },
   { icon: '🏛️', label: 'Setores', href: '/configuracoes/setores' },
@@ -102,6 +107,9 @@ export default function Sidebar({ user }: SidebarProps) {
 
         {(user.role === 'supervisor' || user.role === 'admin') && (
           <>
+            <div className={styles.navSection}>Canal AMMOC</div>
+            {CANAL_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
+
             <div className={styles.navSection}>Admin</div>
             {ADMIN_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
           </>
