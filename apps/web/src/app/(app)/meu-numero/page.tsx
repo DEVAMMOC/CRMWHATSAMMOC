@@ -9,7 +9,9 @@ import { ConversationPanel } from './ConversationPanel';
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function getApiBase(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+  // Empty in production → relative /api/* paths, reverse-proxied by Next (see
+  // next.config.ts rewrites). In dev, .env.local sets this to http://localhost:3001.
+  return process.env.NEXT_PUBLIC_API_URL ?? '';
 }
 
 async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
