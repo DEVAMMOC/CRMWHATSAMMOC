@@ -18,6 +18,7 @@ interface Conversation {
   last_message_at: string | null;
   last_synced_at: string | null;
   created_at: string;
+  sector_id: string | null;
 }
 
 type StatusFilter = 'all' | 'pendente' | 'ativa' | 'encerrada';
@@ -64,6 +65,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [sectors, setSectors] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [sectorFilter, setSectorFilter] = useState<string | null>(null); // null = all
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -95,6 +98,8 @@ export default function DashboardPage() {
       if (user) {
         setCurrentUserId(user.id);
         await loadData(user.id);
+        const { data: sectorData } = await supabase.from('sectors').select('id, name, color').order('name');
+        setSectors((sectorData ?? []) as { id: string; name: string; color: string }[]);
       } else {
         setLoading(false);
       }
@@ -206,13 +211,14 @@ export default function DashboardPage() {
 
   const filtered = conversations.filter(c => {
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
+    const matchSector = !sectorFilter || c.sector_id === sectorFilter;
     const term = searchTerm.toLowerCase();
     const matchSearch =
       !term ||
       (c.contact_name ?? '').toLowerCase().includes(term) ||
       c.contact_number.toLowerCase().includes(term) ||
       (c.municipality ?? '').toLowerCase().includes(term);
-    return matchStatus && matchSearch;
+    return matchStatus && matchSector && matchSearch;
   });
 
   const counts: Record<StatusFilter, number> = {
@@ -346,6 +352,24 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Sector filter chips */}
+      {sectors.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', fontWeight: 600 }}>Setor:</span>
+          <button onClick={() => setSectorFilter(null)}
+            style={{ padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', background: !sectorFilter ? 'var(--ammoc-ink-700)' : 'var(--ammoc-paper-2)', color: !sectorFilter ? 'white' : 'var(--ammoc-ink-500)' }}>
+            Todos
+          </button>
+          {sectors.map(s => (
+            <button key={s.id} onClick={() => setSectorFilter(sectorFilter === s.id ? null : s.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', background: sectorFilter === s.id ? s.color : 'var(--ammoc-paper-2)', color: sectorFilter === s.id ? 'white' : 'var(--ammoc-ink-500)', transition: 'all 0.15s' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: sectorFilter === s.id ? 'rgba(255,255,255,0.6)' : s.color }} />
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Content */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
@@ -422,6 +446,14 @@ export default function DashboardPage() {
                     </span>
                   )}
                   <StatusBadge status={conv.status} />
+                  {conv.sector_id && (() => {
+                    const sec = sectors.find(s => s.id === conv.sector_id);
+                    return sec ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: sec.color + '22', color: sec.color, border: `1px solid ${sec.color}44`, whiteSpace: 'nowrap' }}>
+                        🏛️ {sec.name}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
