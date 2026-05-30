@@ -152,12 +152,15 @@ export default function DashboardPage() {
         throw new Error(msg);
       }
 
-      const result = await res.json() as { synced: number };
+      const result = await res.json() as { synced: number; historyRequested: number };
 
       setSyncPhase('Concluído!');
       setSyncProgress(100);
       if (currentUserId) await loadData(currentUserId);
-      setSyncResult({ ok: true, message: `✅ ${result.synced} contato(s) importado(s) com sucesso.` });
+      const histMsg = result.historyRequested > 0
+        ? ` Histórico solicitado para ${result.historyRequested} conversa(s) — chegará em instantes.`
+        : '';
+      setSyncResult({ ok: true, message: `✅ ${result.synced} conversa(s) importada(s).${histMsg}` });
     } catch (err: unknown) {
       cancelled = true;
       await progressPromise;

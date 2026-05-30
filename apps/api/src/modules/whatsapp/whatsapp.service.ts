@@ -135,7 +135,7 @@ export class WhatsAppService {
       .eq('id', conversationId);
   }
 
-  async syncConversations(userId: string): Promise<{ synced: number }> {
+  async syncConversations(userId: string): Promise<{ synced: number; historyRequested: number }> {
     const user = await this.getUserRow(userId);
     if (!user.evolution_instance_token) throw new BadRequestException('WhatsApp não está conectado');
 
@@ -143,6 +143,11 @@ export class WhatsAppService {
     this.logger.log(`Sync: fetched ${contacts.length} contacts for user ${userId}`);
 
     let synced = 0;
+    let historyRequested = 0;
+
+    // Collect valid JIDs for history requests
+    const validJids: string[] = [];
+
     for (const contact of contacts) {
       // Skip groups and broadcast
       if (contact.Jid.endsWith('@g.us')) continue;
@@ -173,11 +178,38 @@ export class WhatsAppService {
         this.logger.warn(`Sync: failed to upsert contact ${contactNumber}: ${error.message}`);
       } else {
         synced++;
+        // Only request history for @s.whatsapp.net JIDs (not @lid privacy JIDs)
+        if (contact.Jid.endsWith('@s.whatsapp.net')) {
+          validJids.push(contact.Jid);
+        }
       }
     }
 
-    this.logger.log(`Sync complete: ${synced}/${contacts.length} contacts upserted for user ${userId}`);
-    return { synced };
+    // Request chat history for each conversation — Evolution forwards messages via webhook.
+    // Run in batches of 5 concurrent requests to avoid overwhelming WhatsApp.
+    const BATCH = 5;
+    for (let i = 0; i < validJids.length; i += BATCH) {
+      const batch = validJids.slice(i, i + BATCH);
+      await Promise.allSettled(
+        batch.map(async (jid) => {
+          try {
+            await this.evolution.requestChatHistory(user.evolution_instance_token!, jid, 50);
+            historyRequested++;
+          } catch (e) {
+            this.logger.warn(`Sync: history request failed for ${jid}: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }),
+      );
+      // Small pause between batches to avoid rate limiting
+      if (i + BATCH < validJids.length) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    this.logger.log(
+      `Sync complete: ${synced} conversations, ${historyRequested} history requests sent for user ${userId}`,
+    );
+    return { synced, historyRequested };
   }
 
   async disconnect(userId: string): Promise<void> {

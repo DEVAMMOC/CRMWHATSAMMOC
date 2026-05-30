@@ -18,6 +18,9 @@ export class WebhookService {
     // Evolution Go uses "Message" (mixed-case); older versions use "messages.upsert" or "MESSAGE"
     if (event === 'messages.upsert' || event === 'MESSAGE' || event === 'Message') {
       await this.handleMessage(instanceToken, data);
+    } else if (event === 'MESSAGES_SET' || event === 'messages.set') {
+      // Bulk history sync — data.messages is an array of message objects
+      await this.handleMessagesSet(instanceToken, data);
     } else if (event === 'connection.update') {
       await this.handleConnectionUpdate(instanceToken, data);
     } else {
@@ -128,6 +131,30 @@ export class WebhookService {
     } else {
       this.logger.log(`Message saved — conv:${convId} dir:${direction} contact:${contactNumber}`);
     }
+  }
+
+  /**
+   * Handle MESSAGES_SET — bulk history sync payload.
+   * Evolution Go sends this when history-sync-request completes.
+   * data.messages is an array of message objects with the same shape as individual MESSAGE events.
+   */
+  private async handleMessagesSet(token: string, data: Record<string, unknown>): Promise<void> {
+    const messages = (data['messages'] ?? data['data'] ?? []) as Record<string, unknown>[];
+    if (!Array.isArray(messages) || messages.length === 0) {
+      this.logger.log(`MESSAGES_SET received but no messages array found. Keys: ${Object.keys(data).join(', ')}`);
+      return;
+    }
+    this.logger.log(`MESSAGES_SET: processing ${messages.length} historical messages`);
+    let saved = 0;
+    for (const msg of messages) {
+      try {
+        await this.handleMessage(token, msg);
+        saved++;
+      } catch (e) {
+        this.logger.warn(`MESSAGES_SET: failed to process message: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    this.logger.log(`MESSAGES_SET complete: ${saved}/${messages.length} stored`);
   }
 
   private async handleConnectionUpdate(token: string, data: Record<string, unknown>): Promise<void> {

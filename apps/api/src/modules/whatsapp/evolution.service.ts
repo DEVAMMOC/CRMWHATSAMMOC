@@ -155,4 +155,42 @@ export class EvolutionService {
     const result = await res.json() as { data: ContactItem[] };
     return result.data ?? [];
   }
+
+  /**
+   * Request WhatsApp to push message history for a specific chat via webhook.
+   * Evolution Go sends the messages back as MESSAGE webhook events.
+   * This is fire-and-forget — the response just confirms the request was sent.
+   */
+  async requestChatHistory(token: string, jid: string, count = 50): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/chat/history-sync-request`, {
+      method: 'POST',
+      headers: this.instanceHeaders(token),
+      body: JSON.stringify({
+        count,
+        messageInfo: { botJID: jid },
+      }),
+    });
+    // Non-fatal: log but don't throw — history sync is best-effort
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`history-sync-request failed for ${jid}: ${text}`);
+    }
+  }
+
+  /**
+   * Update the webhook subscription for an existing connected instance
+   * to also include MESSAGES_SET events (bulk history sync).
+   */
+  async updateWebhookSubscription(token: string, webhookUrl: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/instance/connect`, {
+      method: 'POST',
+      headers: this.instanceHeaders(token),
+      body: JSON.stringify({
+        webhookUrl,
+        subscribe: ['MESSAGE', 'MESSAGES_SET', 'connection.update'],
+        immediate: false,
+      }),
+    });
+    if (!res.ok) throw new Error(`Evolution webhook update failed: ${await res.text()}`);
+  }
 }
