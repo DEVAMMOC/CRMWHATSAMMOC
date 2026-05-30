@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { SectorsModule } from './modules/sectors/sectors.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { CanalModule } from './modules/canal/canal.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -15,6 +16,7 @@ import configuration from './config/configuration';
     UsersModule,
     SectorsModule,
     WhatsAppModule,
+    CanalModule,
   ],
   controllers: [AppController],
 })

@@ -1,0 +1,166 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { MetaService } from './meta.service';
+
+@Injectable()
+export class CanalConversationService {
+  private readonly logger = new Logger(CanalConversationService.name);
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly meta: MetaService,
+  ) {}
+
+  /** Webhook inbound: cria/atualiza conversa e grava a mensagem recebida. */
+  async ingestInbound(params: {
+    phoneNumberId: string;
+    from: string;
+    name: string | null;
+    waMessageId: string;
+    content: string;
+    tsISO: string;
+  }): Promise<void> {
+    const { data: num } = await this.supabase
+      .from('canal_numbers')
+      .select('id, active')
+      .eq('phone_number_id', params.phoneNumberId)
+      .single();
+    if (!num || !(num as { active: boolean }).active) {
+      this.logger.warn(
+        `Canal: número desconhecido/inativo ${params.phoneNumberId}`,
+      );
+      return;
+    }
+    const numberId = (num as { id: string }).id;
+
+    const { data: conv, error: convErr } = await this.supabase
+      .from('canal_conversations')
+      .upsert(
+        {
+          canal_number_id: numberId,
+          wa_contact_number: params.from,
+          wa_contact_name: params.name,
+          last_in_at: params.tsISO,
+          last_message_at: params.tsISO,
+          // status: omitido — INSERT usa default 'open'; em conflito não reseta delegação.
+          // Reabrir se estava 'closed' é feito abaixo.
+        },
+        {
+          onConflict: 'canal_number_id,wa_contact_number',
+          ignoreDuplicates: false,
+        },
+      )
+      .select('id, status')
+      .single();
+    if (convErr || !conv) {
+      this.logger.error(`Canal: erro upsert conversa: ${convErr?.message}`);
+      return;
+    }
+    const c = conv as { id: string; status: string };
+    if (c.status === 'closed') {
+      await this.supabase
+        .from('canal_conversations')
+        .update({ status: 'open' })
+        .eq('id', c.id);
+    }
+    await this.supabase.from('canal_messages').upsert(
+      {
+        conversation_id: c.id,
+        direction: 'in',
+        content: params.content || '[mídia]',
+        wa_message_id: params.waMessageId,
+        sent_at: params.tsISO,
+      },
+      { onConflict: 'wa_message_id', ignoreDuplicates: true },
+    );
+  }
+
+  async list(): Promise<unknown[]> {
+    const { data } = await this.supabase
+      .from('canal_conversations')
+      .select('*, canal_numbers(label, display_number)')
+      .order('last_message_at', { ascending: false });
+    return data ?? [];
+  }
+
+  async messages(conversationId: string): Promise<unknown[]> {
+    const { data } = await this.supabase
+      .from('canal_messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('sent_at', { ascending: true });
+    return data ?? [];
+  }
+
+  /** Funcionário/admin responde pela inbox → envia via Meta e grava 'out'. */
+  async reply(
+    conversationId: string,
+    userId: string,
+    text: string,
+  ): Promise<void> {
+    const { data: conv } = await this.supabase
+      .from('canal_conversations')
+      .select('id, wa_contact_number, last_in_at, canal_numbers(phone_number_id)')
+      .eq('id', conversationId)
+      .single();
+    if (!conv) throw new NotFoundException('Conversa não encontrada');
+    const cc = conv as unknown as {
+      wa_contact_number: string;
+      last_in_at: string | null;
+      canal_numbers: { phone_number_id: string };
+    };
+
+    // Janela de 24h da Meta para mensagens livres.
+    if (
+      !cc.last_in_at ||
+      Date.now() - new Date(cc.last_in_at).getTime() > 24 * 60 * 60 * 1000
+    ) {
+      throw new BadRequestException(
+        'Fora da janela de 24h da Meta — requer template aprovado (indisponível na Fase 1).',
+      );
+    }
+    const result = await this.meta.sendText(
+      cc.canal_numbers.phone_number_id,
+      cc.wa_contact_number,
+      text,
+    );
+    if (!result.ok)
+      throw new BadRequestException(result.error ?? 'Falha ao enviar pela Meta');
+    const now = new Date().toISOString();
+    await this.supabase.from('canal_messages').insert({
+      conversation_id: conversationId,
+      direction: 'out',
+      content: text,
+      wa_message_id: result.wa_message_id ?? null,
+      sent_by: userId,
+      sent_at: now,
+    });
+    await this.supabase
+      .from('canal_conversations')
+      .update({ last_message_at: now, status: 'human' })
+      .eq('id', conversationId);
+  }
+
+  async delegate(
+    conversationId: string,
+    sectorId: string | null,
+    assignedTo: string | null,
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('canal_conversations')
+      .update({ sector_id: sectorId, assigned_to: assignedTo, status: 'human' })
+      .eq('id', conversationId);
+    if (error) throw new BadRequestException(error.message);
+  }
+
+  async close(conversationId: string): Promise<void> {
+    await this.supabase
+      .from('canal_conversations')
+      .update({ status: 'closed' })
+      .eq('id', conversationId);
+  }
+}

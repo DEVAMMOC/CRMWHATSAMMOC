@@ -11,7 +11,17 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   // Evolution Go webhook payloads can be ~200KB (contact photos + message data)
-  app.use(json({ limit: '10mb' }));
+  // The `verify` hook stores the raw request buffer so the Canal webhook can
+  // validate Meta's X-Hub-Signature-256 against the exact bytes received.
+  // Controllers continue to read the parsed `req.body` as usual.
+  app.use(
+    json({
+      limit: '10mb',
+      verify: (req, _res, buf) => {
+        (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   app.setGlobalPrefix('api');
