@@ -1,6 +1,16 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
-import type { AppUser, Sector, SectorWithMembers } from '@crmwhats/types';
+import type {
+  Sector,
+  SectorMemberUser,
+  SectorWithMembers,
+} from '@crmwhats/types';
+
+// Explicit, public-safe column list for embedded sector members. Never use
+// users(*) here: that would leak secrets such as evolution_instance_token to
+// any authenticated client via GET /sectors and GET /sectors/:id.
+const MEMBER_COLUMNS =
+  'id, email, name, role, whatsapp_number, whatsapp_status, is_online, created_at';
 import type { CreateSectorDto } from './dto/create-sector.dto';
 import type { UpdateSectorDto } from './dto/update-sector.dto';
 
@@ -45,17 +55,17 @@ export class SectorsService {
 
     const { data: memberships, error: memberError } = await this.supabase
       .from('sector_members')
-      .select('sector_id, users(*)')
+      .select(`sector_id, users(${MEMBER_COLUMNS})`)
       .in('sector_id', sectorIds);
     if (memberError) throw new Error(memberError.message);
 
-    const memberMap = new Map<string, AppUser[]>();
+    const memberMap = new Map<string, SectorMemberUser[]>();
     for (const m of (memberships ?? []) as Array<{
       sector_id: string;
       users: unknown;
     }>) {
       const arr = memberMap.get(m.sector_id) ?? [];
-      if (m.users) arr.push(m.users as AppUser);
+      if (m.users) arr.push(m.users as SectorMemberUser);
       memberMap.set(m.sector_id, arr);
     }
 
@@ -72,13 +82,13 @@ export class SectorsService {
 
     const { data: memberships, error: memberError } = await this.supabase
       .from('sector_members')
-      .select('users(*)')
+      .select(`users(${MEMBER_COLUMNS})`)
       .eq('sector_id', id);
     if (memberError) throw new Error(memberError.message);
 
     const members = ((memberships ?? []) as Array<{ users: unknown }>)
-      .map((m) => m.users as AppUser)
-      .filter((u): u is AppUser => Boolean(u));
+      .map((m) => m.users as SectorMemberUser)
+      .filter((u): u is SectorMemberUser => Boolean(u));
 
     return { ...(data as Sector), members };
   }

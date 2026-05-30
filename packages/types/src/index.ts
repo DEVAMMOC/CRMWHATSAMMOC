@@ -134,6 +134,16 @@ export interface SectorMember {
   user_id: string;
 }
 
+/**
+ * Public-safe projection of a user when embedded as a sector member.
+ * Excludes secret/internal fields (evolution_instance_id,
+ * evolution_instance_token) that must never be exposed via the sectors API.
+ */
+export type SectorMemberUser = Omit<
+  AppUser,
+  'evolution_instance_id' | 'evolution_instance_token'
+>;
+
 export interface SectorWithMembers extends Sector {
-  members: AppUser[];
+  members: SectorMemberUser[];
 }
