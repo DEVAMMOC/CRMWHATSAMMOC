@@ -69,9 +69,11 @@ export default function MeuNumeroPage() {
 
   // Conversations tab state
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [convLoading, setConvLoading] = useState(false); // Fix 3: loading state for conversations tab
+  const [convLoading, setConvLoading] = useState(false);
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [convError, setConvError] = useState<string | null>(null);
+  const [convSearch, setConvSearch] = useState('');
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // ── Load user + session ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -190,8 +192,7 @@ export default function MeuNumeroPage() {
         .from('conversations')
         .select('*')
         .eq('owner_user_id', user!.id)
-        .in('status', ['nao_salva', 'pendente'])
-        .order('last_message_at', { ascending: false });
+        .order('last_message_at', { ascending: false, nullsFirst: false });
       if (error) setConvError(error.message);
       else setConversations((data ?? []) as Conversation[]);
       setConvLoading(false);
@@ -221,7 +222,7 @@ export default function MeuNumeroPage() {
   const statusLabel = wsStatus === 'connected' ? 'Conectado' : wsStatus === 'connecting' ? 'Conectando…' : 'Desconectado';
 
   return (
-    <div style={{ padding: '32px', flex: 1, maxWidth: 700 }}>
+    <div style={{ padding: '32px', flex: 1, maxWidth: 800 }}>
       {/* Header */}
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--ammoc-ink-900)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
         Meu Número WhatsApp
@@ -345,63 +346,164 @@ export default function MeuNumeroPage() {
 
       {/* ── TAB: CONVERSAS ────────────────────────────────────────────────────── */}
       {tab === 'conversas' && (
-        <div style={card}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ammoc-ink-900)', marginBottom: 4 }}>
-            Conversas recebidas no seu WhatsApp
+        <div style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+
+          {/* WhatsApp-style header with search */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--ammoc-line-2)', background: 'var(--ammoc-paper-2)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', marginBottom: 10 }}>
+              Minhas conversas
+              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, background: 'var(--ammoc-line-2)', color: 'var(--ammoc-ink-400)', padding: '2px 8px', borderRadius: 99 }}>
+                {conversations.length}
+              </span>
+            </div>
+            <input
+              type="text"
+              placeholder="🔍  Pesquisar conversa..."
+              value={convSearch}
+              onChange={e => setConvSearch(e.target.value)}
+              style={{ width: '100%', background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line)', borderRadius: 'var(--radius-sm)', padding: '7px 12px', fontSize: 13, outline: 'none', color: 'var(--ammoc-ink-900)', boxSizing: 'border-box' }}
+            />
           </div>
-          <p style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', margin: '0 0 16px' }}>
-            Selecione as conversas que deseja compartilhar com a organização.
-          </p>
 
           {convError && (
-            <div style={{ background: 'var(--ammoc-red-100)', border: '1px solid var(--ammoc-red)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontSize: 13, color: 'var(--ammoc-red-700)', marginBottom: 16 }}>
+            <div style={{ padding: '10px 16px', fontSize: 13, color: '#b91c1c', background: '#fef2f2', borderBottom: '1px solid #fca5a5' }}>
               {convError}
             </div>
           )}
 
-          {/* Fix 3: show loading indicator while fetching */}
+          {/* Conversation list */}
           {convLoading ? (
-            <div style={{ color: 'var(--ammoc-ink-400)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
+            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--ammoc-ink-400)', fontSize: 13 }}>
+              <div style={{ width: 24, height: 24, border: '3px solid var(--ammoc-line-2)', borderTopColor: 'var(--ammoc-green)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 10px' }} />
               Carregando conversas…
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : conversations.length === 0 ? (
-            <div style={{ color: 'var(--ammoc-ink-400)', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
-              Nenhuma conversa ainda. Conecte seu WhatsApp e aguarde mensagens.
+            <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--ammoc-ink-400)' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Nenhuma conversa ainda</div>
+              <div style={{ fontSize: 12 }}>Conecte seu WhatsApp na aba Conexão e aguarde mensagens chegarem.</div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {conversations.map(conv => (
-                <div
-                  key={conv.id}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--ammoc-line)' }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {conv.contact_name || conv.contact_number}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
-                      {conv.contact_number}
-                      {conv.last_message_at && ` · ${new Date(conv.last_message_at).toLocaleDateString('pt-BR')}`}
-                    </div>
-                  </div>
-                  {conv.status === 'nao_salva' ? (
-                    <button
-                      type="button"
-                      style={btn('primary')}
-                      onClick={() => handleShare(conv.id)}
-                      disabled={sharingId === conv.id}
+          ) : (() => {
+            const filtered = conversations.filter(c => {
+              const q = convSearch.toLowerCase();
+              return !q || (c.contact_name ?? '').toLowerCase().includes(q) || c.contact_number.includes(q);
+            });
+            return filtered.length === 0 ? (
+              <div style={{ padding: '32px', textAlign: 'center', color: 'var(--ammoc-ink-400)', fontSize: 13 }}>
+                Nenhuma conversa encontrada para &quot;{convSearch}&quot;
+              </div>
+            ) : (
+              <div>
+                {filtered.map(conv => {
+                  const name = conv.contact_name || conv.contact_number;
+                  const initials = name.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+                  const avatarColors = ['#25D366','#128C7E','#075E54','#34B7F1','#00BFA5','#1565C0','#6A1B9A','#AD1457','#E65100','#558B2F'];
+                  const colorIdx = name.split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % avatarColors.length;
+                  const avatarColor = avatarColors[colorIdx];
+                  const isShared = conv.status !== 'nao_salva';
+                  const isHovered = hoveredId === conv.id;
+
+                  const fmtTime = (ts: string | null) => {
+                    if (!ts) return '';
+                    const d = new Date(ts);
+                    const now = new Date();
+                    const diffMs = now.getTime() - d.getTime();
+                    const diffMin = Math.floor(diffMs / 60000);
+                    if (diffMin < 1) return 'agora';
+                    if (diffMin < 60) return `${diffMin}min`;
+                    const diffH = Math.floor(diffMin / 60);
+                    if (diffH < 24) return `${diffH}h`;
+                    if (diffH < 24 * 7) return d.toLocaleDateString('pt-BR', { weekday: 'short' });
+                    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                  };
+
+                  const statusBadge: Record<string, { label: string; color: string; bg: string }> = {
+                    pendente:  { label: 'Pendente',  color: '#92400e', bg: '#fef3c7' },
+                    ativa:     { label: 'Ativa',     color: '#14532d', bg: '#dcfce7' },
+                    encerrada: { label: 'Encerrada', color: '#6b7280', bg: '#f3f4f6' },
+                  };
+                  const badge = isShared ? (statusBadge[conv.status] ?? statusBadge['pendente']) : null;
+
+                  return (
+                    <div
+                      key={conv.id}
+                      onMouseEnter={() => setHoveredId(conv.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                        borderBottom: '1px solid var(--ammoc-line-2)',
+                        background: isHovered ? 'var(--ammoc-paper-2)' : 'transparent',
+                        transition: 'background 0.1s', cursor: 'default', position: 'relative',
+                      }}
                     >
-                      {sharingId === conv.id ? 'Compartilhando…' : 'Compartilhar'}
-                    </button>
-                  ) : (
-                    <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: 'var(--ammoc-green-100)', color: 'var(--ammoc-green-800)' }}>
-                      Compartilhada
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+                      {/* Avatar */}
+                      <div style={{ width: 46, height: 46, borderRadius: '50%', background: avatarColor, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em' }}>
+                        {initials || '?'}
+                      </div>
+
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            {name}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            {fmtTime(conv.last_message_at)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            {conv.contact_number}
+                          </span>
+                          {badge && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: badge.bg, color: badge.color, flexShrink: 0 }}>
+                              {badge.label}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Share button — always visible on mobile, revealed on hover on desktop */}
+                      <div style={{ flexShrink: 0, opacity: isShared ? 1 : (isHovered ? 1 : 0.4), transition: 'opacity 0.15s' }}>
+                        {isShared ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'var(--ammoc-green-700)' }}>
+                            <span style={{ fontSize: 15 }}>✓</span>
+                            <span style={{ display: isHovered ? 'inline' : 'none' }}>Compartilhada</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={sharingId === conv.id}
+                            onClick={() => void handleShare(conv.id)}
+                            title="Compartilhar com a organização"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 5,
+                              background: isHovered ? 'var(--ammoc-green)' : 'var(--ammoc-green-100)',
+                              color: isHovered ? 'white' : 'var(--ammoc-green-700)',
+                              border: 'none', borderRadius: 'var(--radius-sm)',
+                              padding: '5px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                              transition: 'all 0.15s',
+                              opacity: sharingId === conv.id ? 0.6 : 1,
+                            }}
+                          >
+                            {sharingId === conv.id ? (
+                              '…'
+                            ) : (
+                              <>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                                Compartilhar
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
