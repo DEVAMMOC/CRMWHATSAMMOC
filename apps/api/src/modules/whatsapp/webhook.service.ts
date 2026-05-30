@@ -45,9 +45,7 @@ export class WebhookService {
 
     // Evolution Go (whatsmeow) sends { Info: {...}, Message: {...} } with capitalized
     // top-level keys; older Evolution API (Baileys) sends { key, message, messageTimestamp }.
-    // Support both shapes. (Temporary verbose log to confirm the payload shape in prod.)
-    this.logger.log(`webhook payload: ${JSON.stringify(data).slice(0, 1500)}`);
-
+    // Support both shapes.
     const info = (data['Info'] ?? data['info']) as Record<string, unknown> | undefined;
     const message = (data['Message'] ?? data['message']) as Record<string, unknown> | undefined;
     const key = data['key'] as Record<string, unknown> | undefined;
@@ -87,9 +85,22 @@ export class WebhookService {
     if (remoteJid === 'status@broadcast') { this.logger.debug('Skipping status broadcast'); return; }
     if (remoteJid.endsWith('@newsletter')) { this.logger.debug('Skipping newsletter'); return; }
 
-    const contactNumber = remoteJid.split('@')[0];
+    // Resolve the contact's phone number. Newer WhatsApp uses @lid (privacy) JIDs for
+    // the chat; the real @s.whatsapp.net number is provided in RecipientAlt/SenderAlt/Sender.
+    let peerJid = remoteJid;
+    if (remoteJid.endsWith('@lid')) {
+      const alts = [
+        pick(info, 'RecipientAlt', 'recipientAlt'),
+        pick(info, 'SenderAlt', 'senderAlt'),
+        pick(info, 'Sender', 'sender'),
+      ];
+      const altPhone = alts.find((j): j is string => typeof j === 'string' && j.endsWith('@s.whatsapp.net'));
+      if (altPhone) peerJid = altPhone;
+    }
+    const contactNumber = peerJid.split('@')[0];
     // Use the sender's WhatsApp display name for incoming messages when available.
     const contactName = (!fromMe && pushName) ? pushName : contactNumber;
+    this.logger.log(`webhook msg: chat=${remoteJid} contact=${contactNumber} dir=${direction}`);
 
     // Timestamp — whatsmeow: Info.Timestamp (RFC3339 string); Baileys: messageTimestamp (unix sec).
     const ts = pick(info, 'Timestamp', 'timestamp') ?? data['messageTimestamp'];
