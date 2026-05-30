@@ -34,6 +34,7 @@ const ORG_NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { icon: '📊', label: 'Painel Admin', href: '/admin' },
+  { icon: '🏛️', label: 'Setores', href: '/configuracoes/setores' },
   { icon: '⚙️', label: 'Configurações', href: '/configuracoes' },
 ];
 

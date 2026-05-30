@@ -10,6 +10,11 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Get()
+  async findAll() {
+    return this.usersService.findAll();
+  }
+
   @Get('me')
   async getMe(@CurrentUser() authUser: User) {
     return this.usersService.findById(authUser.id);

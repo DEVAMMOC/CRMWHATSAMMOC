@@ -1,7 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
-import type { AppUser } from '@crmwhats/types';
+import type { AppUser, SectorMemberUser } from '@crmwhats/types';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
+
+/**
+ * Public-safe column projection — excludes secret fields
+ * (evolution_instance_id, evolution_instance_token) that must never
+ * be exposed via the users list API. Mirrors the SectorsService precedent.
+ */
+const SAFE_USER_COLUMNS =
+  'id, email, name, role, whatsapp_number, whatsapp_status, is_online, created_at';
 
 @Injectable()
 export class UsersService {
@@ -19,14 +27,14 @@ export class UsersService {
     return data as AppUser;
   }
 
-  async findAll(): Promise<AppUser[]> {
+  async findAll(): Promise<SectorMemberUser[]> {
     const { data, error } = await this.supabase
       .from('users')
-      .select('*')
+      .select(SAFE_USER_COLUMNS)
       .order('name');
 
     if (error) throw new Error(error.message);
-    return (data ?? []) as AppUser[];
+    return (data ?? []) as unknown as SectorMemberUser[];
   }
 
   async updateProfile(id: string, dto: UpdateProfileDto): Promise<AppUser> {
