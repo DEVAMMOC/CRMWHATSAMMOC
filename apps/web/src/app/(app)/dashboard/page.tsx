@@ -67,6 +67,9 @@ export default function DashboardPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const [syncPhase, setSyncPhase] = useState('');
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const supabase = createClient();
   const router = useRouter();
@@ -100,6 +103,36 @@ export default function DashboardPage() {
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncResult(null);
+    setSyncProgress(0);
+
+    // Simulated progress phases while API call runs in background
+    const phases: { label: string; target: number; delay: number }[] = [
+      { label: 'Conectando ao WhatsApp...', target: 20, delay: 400 },
+      { label: 'Buscando contatos...', target: 55, delay: 1200 },
+      { label: 'Importando conversas...', target: 80, delay: 2000 },
+    ];
+
+    let cancelled = false;
+    const runPhases = async () => {
+      for (const phase of phases) {
+        if (cancelled) break;
+        setSyncPhase(phase.label);
+        // Animate progress smoothly to target
+        const start = Date.now();
+        const animate = () => {
+          const elapsed = Date.now() - start;
+          const frac = Math.min(elapsed / phase.delay, 1);
+          setSyncProgress(prev => Math.max(prev, phase.target * frac));
+          if (frac < 1 && !cancelled) requestAnimationFrame(animate);
+        };
+        animate();
+        await new Promise(r => setTimeout(r, phase.delay));
+      }
+    };
+
+    const progressPromise = runPhases();
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${API}/api/whatsapp/sync`, {
@@ -109,17 +142,29 @@ export default function DashboardPage() {
           Authorization: `Bearer ${session?.access_token ?? ''}`,
         },
       });
+
+      cancelled = true;
+      await progressPromise;
+
       if (!res.ok) {
-        const err = await res.json() as { message?: string };
-        throw new Error(err.message ?? `HTTP ${res.status}`);
+        let msg = `Erro HTTP ${res.status}`;
+        try { const err = await res.json() as { message?: string }; msg = err.message ?? msg; } catch { /* ignore */ }
+        throw new Error(msg);
       }
+
       const result = await res.json() as { synced: number };
-      // Reload conversation list after sync
+
+      setSyncPhase('Concluído!');
+      setSyncProgress(100);
       if (currentUserId) await loadData(currentUserId);
-      alert(`Sincronizado! ${result.synced} contato(s) importado(s).`);
+      setSyncResult({ ok: true, message: `✅ ${result.synced} contato(s) importado(s) com sucesso.` });
     } catch (err: unknown) {
+      cancelled = true;
+      await progressPromise;
       const msg = err instanceof Error ? err.message : String(err);
-      alert('Erro ao sincronizar: ' + msg);
+      setSyncPhase('');
+      setSyncProgress(0);
+      setSyncResult({ ok: false, message: `❌ Erro: ${msg}` });
     } finally {
       setSyncing(false);
     }
@@ -204,23 +249,57 @@ export default function DashboardPage() {
           title="Importar todos os contatos do WhatsApp"
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            background: syncing ? 'var(--ammoc-line)' : 'var(--ammoc-paper-2)',
-            color: syncing ? 'var(--ammoc-ink-400)' : 'var(--ammoc-ink-700)',
-            border: '1.5px solid var(--ammoc-line)',
+            background: syncing ? 'var(--ammoc-paper-2)' : 'var(--ammoc-paper-2)',
+            color: syncing ? 'var(--ammoc-green)' : 'var(--ammoc-ink-700)',
+            border: `1.5px solid ${syncing ? 'var(--ammoc-green)' : 'var(--ammoc-line)'}`,
             borderRadius: 'var(--radius-sm)',
             padding: '6px 14px', fontSize: 13, fontWeight: 600,
             cursor: syncing ? 'default' : 'pointer',
             transition: 'all 0.15s',
           }}
         >
-          <span style={{
-            display: 'inline-block',
-            animation: syncing ? 'spin 0.8s linear infinite' : 'none',
-          }}>🔄</span>
-          {syncing ? 'Sincronizando...' : 'Sincronizar'}
+          <span style={{ display: 'inline-block', animation: syncing ? 'spin 0.8s linear infinite' : 'none' }}>🔄</span>
+          {syncing ? syncPhase || 'Iniciando...' : 'Sincronizar'}
         </button>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
+
+      {/* Sync progress bar */}
+      {syncing && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            height: 6, background: 'var(--ammoc-line-2)', borderRadius: 99, overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%', borderRadius: 99,
+              background: 'linear-gradient(90deg, var(--ammoc-green), var(--ammoc-green-600, #16a34a))',
+              width: `${syncProgress}%`,
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', marginTop: 4 }}>
+            {syncPhase}
+          </div>
+        </div>
+      )}
+
+      {/* Sync result banner */}
+      {!syncing && syncResult && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', borderRadius: 'var(--radius-sm)', marginBottom: 16,
+          background: syncResult.ok ? 'var(--ammoc-green-100)' : '#fef2f2',
+          border: `1px solid ${syncResult.ok ? 'var(--ammoc-green)' : '#fca5a5'}`,
+          color: syncResult.ok ? 'var(--ammoc-green-800)' : '#b91c1c',
+          fontSize: 13, fontWeight: 600,
+        }}>
+          <span>{syncResult.message}</span>
+          <button
+            onClick={() => setSyncResult(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: 'inherit', opacity: 0.6 }}
+          >×</button>
+        </div>
+      )}
 
       {/* Search */}
       <input
