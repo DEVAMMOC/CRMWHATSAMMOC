@@ -4,15 +4,10 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { AppUser, Conversation } from '@crmwhats/types';
 import Image from 'next/image';
+import { getApiBase } from '@/lib/api-base';
 import { ConversationPanel } from './ConversationPanel';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-function getApiBase(): string {
-  // Empty in production → relative /api/* paths, reverse-proxied by Next (see
-  // next.config.ts rewrites). In dev, .env.local sets this to http://localhost:3001.
-  return process.env.NEXT_PUBLIC_API_URL ?? '';
-}
 
 async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
   const res = await fetch(`${getApiBase()}${path}`, {

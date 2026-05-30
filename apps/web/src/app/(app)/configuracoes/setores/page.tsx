@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getApiBase } from '@/lib/api-base';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+const API = getApiBase();
 
 interface Sector {
   id: string; name: string; description: string | null;

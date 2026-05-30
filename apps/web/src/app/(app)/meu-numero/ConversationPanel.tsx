@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getApiBase } from '@/lib/api-base';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+const API = getApiBase();
 
 function mediaTypeFromMime(mime: string): 'image' | 'video' | 'audio' | 'document' {
   if (mime.startsWith('image/')) return 'image';

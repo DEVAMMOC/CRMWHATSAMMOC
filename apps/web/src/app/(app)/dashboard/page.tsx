@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getApiBase } from '@/lib/api-base';
 
 type ConversationStatus = 'nao_salva' | 'pendente' | 'ativa' | 'encerrada';
 
@@ -58,7 +59,7 @@ function fmtTime(ts: string | null) {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+const API = getApiBase();
 
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);

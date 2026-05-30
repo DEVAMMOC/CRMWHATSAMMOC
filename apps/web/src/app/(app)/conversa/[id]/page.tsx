@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getApiBase } from '@/lib/api-base';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? '';
+const API = getApiBase();
 
 interface Conversation {
   id: string;
