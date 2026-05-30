@@ -147,3 +147,37 @@ export type SectorMemberUser = Omit<
 export interface SectorWithMembers extends Sector {
   members: SectorMemberUser[];
 }
+
+export interface CanalNumber {
+  id: string;
+  phone_number_id: string;
+  display_number: string;
+  label: string;
+  active: boolean;
+  created_at: string;
+}
+
+export type CanalConversationStatus = 'open' | 'human' | 'closed';
+
+export interface CanalConversation {
+  id: string;
+  canal_number_id: string;
+  wa_contact_number: string;
+  wa_contact_name: string | null;
+  sector_id: string | null;
+  assigned_to: string | null;
+  status: CanalConversationStatus;
+  last_in_at: string | null;
+  last_message_at: string | null;
+  created_at: string;
+}
+
+export interface CanalMessage {
+  id: string;
+  conversation_id: string;
+  direction: 'in' | 'out';
+  content: string;
+  wa_message_id: string | null;
+  sent_by: string | null;
+  sent_at: string;
+}
