@@ -46,6 +46,10 @@ export interface Conversation {
   last_synced_at: string | null;
   shared_at: string | null;
   shared_by: string | null;
+  sector_id: string | null;
+  assigned_to: string | null;
+  delegated_at: string | null;
+  delegated_by: string | null;
   created_at: string;
 }
 
@@ -114,4 +118,22 @@ export interface PaginatedResponse<T> {
   total: number;
   page: number;
   limit: number;
+}
+
+export interface Sector {
+  id: string;
+  name: string;
+  description: string | null;
+  keywords: string[];
+  color: string;
+  created_at: string;
+}
+
+export interface SectorMember {
+  sector_id: string;
+  user_id: string;
+}
+
+export interface SectorWithMembers extends Sector {
+  members: AppUser[];
 }
