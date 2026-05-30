@@ -186,39 +186,42 @@ export class WhatsAppService {
     const contacts = await this.evolution.getContacts(user.evolution_instance_token);
     this.logger.log(`Sync: fetched ${contacts.length} contacts for user ${userId}`);
 
-    let synced = 0;
     const historyRequested = 0;
 
+    // Build deduped conversation rows (skip groups/broadcast). Dedup by contact_number
+    // so a single batch upsert never hits the same conflict key twice.
+    const seen = new Set<string>();
+    const rows: Array<{ owner_user_id: string; contact_number: string; contact_name: string; status: string }> = [];
     for (const contact of contacts) {
-      // Skip groups and broadcast
       if (contact.Jid.endsWith('@g.us')) continue;
       if (contact.Jid === 'status@broadcast') continue;
-
       const contactNumber = contact.Jid.split('@')[0];
+      if (seen.has(contactNumber)) continue;
+      seen.add(contactNumber);
       const contactName =
         contact.FullName?.trim() ||
         contact.PushName?.trim() ||
         contact.BusinessName?.trim() ||
         contactNumber;
+      rows.push({ owner_user_id: userId, contact_number: contactNumber, contact_name: contactName, status: 'nao_salva' });
+    }
 
-      // ignoreDuplicates: true — keeps existing status/name if the conversation already exists
-      const { error } = await this.supabase.from('conversations').upsert(
-        {
-          owner_user_id: userId,
-          contact_number: contactNumber,
-          contact_name: contactName,
-          status: 'nao_salva',
-        },
-        {
-          onConflict: 'owner_user_id,contact_number',
-          ignoreDuplicates: true,
-        },
-      );
-
+    // Batch upsert — one round-trip per chunk instead of thousands of sequential
+    // upserts (which exceeded the proxy timeout and surfaced as a 500). With ~2k
+    // contacts this is a handful of calls and completes in a couple of seconds.
+    // ignoreDuplicates: true keeps existing status/name for conversations that exist.
+    let synced = 0;
+    const CHUNK = 500;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      const { error } = await this.supabase.from('conversations').upsert(chunk, {
+        onConflict: 'owner_user_id,contact_number',
+        ignoreDuplicates: true,
+      });
       if (error) {
-        this.logger.warn(`Sync: failed to upsert contact ${contactNumber}: ${error.message}`);
+        this.logger.warn(`Sync: batch upsert failed (rows ${i}-${i + chunk.length}): ${error.message}`);
       } else {
-        synced++;
+        synced += chunk.length;
       }
     }
 
