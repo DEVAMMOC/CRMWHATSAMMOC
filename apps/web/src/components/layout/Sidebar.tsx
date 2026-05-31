@@ -48,12 +48,13 @@ function initials(name: string): string {
 }
 
 // Hoisted outside Sidebar to avoid React remounting on every render
-function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
   const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/'));
   return (
     <Link
       href={item.href}
       className={`${styles.navItem} ${isActive ? styles.navItemActive : ''}`}
+      onClick={onNavigate}
     >
       <span className={styles.navIcon}>{item.icon}</span>
       {item.label}
@@ -65,9 +66,10 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 
 interface SidebarProps {
   user: AppUser;
+  onNavigate?: () => void;
 }
 
-export default function Sidebar({ user }: SidebarProps) {
+export default function Sidebar({ user, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -97,21 +99,21 @@ export default function Sidebar({ user }: SidebarProps) {
 
       <div className={styles.body}>
         <div className={styles.navSection}>Meu painel</div>
-        {FUNCIONARIO_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        {FUNCIONARIO_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         <div className={styles.navSection}>WhatsApp</div>
-        {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         <div className={styles.navSection}>Organização</div>
-        {ORG_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        {ORG_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         {(user.role === 'supervisor' || user.role === 'admin') && (
           <>
             <div className={styles.navSection}>Canal AMMOC</div>
-            {CANAL_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
+            {CANAL_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
             <div className={styles.navSection}>Admin</div>
-            {ADMIN_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} />)}
+            {ADMIN_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
           </>
         )}
       </div>
