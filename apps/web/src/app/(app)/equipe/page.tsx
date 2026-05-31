@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useIsMobile } from '@/lib/use-is-mobile';
 import type { AppUser, UserRole } from '@crmwhats/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -150,6 +151,7 @@ function UserCard({
 
 export default function EquipePage() {
   const supabase = createClient();
+  const isMobile = useIsMobile();
 
   const [users, setUsers] = useState<AppUser[]>([]);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -195,7 +197,7 @@ export default function EquipePage() {
   });
 
   return (
-    <div style={{ padding: '32px', flex: 1 }}>
+    <div style={{ padding: isMobile ? 16 : '32px', flex: 1 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,

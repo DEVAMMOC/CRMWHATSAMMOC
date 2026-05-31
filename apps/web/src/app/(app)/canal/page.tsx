@@ -105,7 +105,7 @@ export default function CanalPage() {
   const selected = conversations.find(c => c.id === selectedId) ?? null;
 
   return (
-    <div style={{ padding: 32, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div style={{ padding: isMobile ? 16 : 32, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--ammoc-ink-900)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
         Canal AMMOC
       </h1>

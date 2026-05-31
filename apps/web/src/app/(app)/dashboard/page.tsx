@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBase } from '@/lib/api-base';
+import { useIsMobile } from '@/lib/use-is-mobile';
 
 type ConversationStatus = 'nao_salva' | 'pendente' | 'ativa' | 'encerrada';
 
@@ -77,6 +78,7 @@ export default function DashboardPage() {
 
   const supabase = createClient();
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const loadData = useCallback(async (userId: string) => {
     setLoading(true);
@@ -240,9 +242,9 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div style={{ padding: 32, flex: 1, minHeight: 0 }}>
+    <div style={{ padding: isMobile ? 16 : 32, flex: 1, minHeight: 0 }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,
           color: 'var(--ammoc-ink-900)', margin: 0, letterSpacing: '-0.02em',

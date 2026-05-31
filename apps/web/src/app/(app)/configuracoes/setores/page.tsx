@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBase } from '@/lib/api-base';
+import { useIsMobile } from '@/lib/use-is-mobile';
 
 const API = getApiBase();
 
@@ -23,6 +24,7 @@ async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
 
 export default function SetoresPage() {
   const supabase = createClient();
+  const isMobile = useIsMobile();
   const [token, setToken] = useState('');
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -89,7 +91,7 @@ export default function SetoresPage() {
   }
 
   return (
-    <div style={{ padding: 32, flex: 1, maxWidth: 800 }}>
+    <div style={{ padding: isMobile ? 16 : 32, flex: 1, maxWidth: isMobile ? '100%' : 800 }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24, gap: 12 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--ammoc-ink-900)', margin: 0, letterSpacing: '-0.02em' }}>
           Setores
@@ -108,7 +110,7 @@ export default function SetoresPage() {
         </div>
       ) : sectors.map(s => (
         <div key={s.id} style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', padding: 20, marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
             <div style={{ width: 14, height: 14, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--ammoc-ink-900)', flex: 1 }}>{s.name}</span>
             <button onClick={() => openEdit(s)} style={{ background: 'var(--ammoc-paper-2)', border: '1px solid var(--ammoc-line)', color: 'var(--ammoc-ink-700)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', fontSize: 12, cursor: 'pointer' }}>Editar</button>
@@ -139,7 +141,7 @@ export default function SetoresPage() {
 
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--ammoc-paper)', borderRadius: 'var(--radius)', padding: 28, width: 440, boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+          <div style={{ background: 'var(--ammoc-paper)', borderRadius: 'var(--radius)', padding: 28, width: isMobile ? '92vw' : 440, maxWidth: '92vw', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
             <h2 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 800 }}>{editing ? 'Editar Setor' : 'Novo Setor'}</h2>
             {error && <div style={{ color: '#b91c1c', fontSize: 12, marginBottom: 12 }}>{error}</div>}
             {(['name','description','keywords'] as const).map(field => (

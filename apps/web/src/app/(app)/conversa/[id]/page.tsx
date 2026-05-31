@@ -724,7 +724,7 @@ export default function ConversaPage() {
       {/* Delegation modal */}
       {showDelegate && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--ammoc-paper)', borderRadius: 'var(--radius)', padding: 28, width: 400, boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+          <div style={{ background: 'var(--ammoc-paper)', borderRadius: 'var(--radius)', padding: 28, width: 400, maxWidth: '92vw', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
             <h2 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 800 }}>Delegar conversa</h2>
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ammoc-ink-600)', display: 'block', marginBottom: 4 }}>Setor</label>

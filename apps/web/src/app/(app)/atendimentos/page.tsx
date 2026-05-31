@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useIsMobile } from '@/lib/use-is-mobile';
 
 interface Conversation {
   id: string;
@@ -81,6 +82,7 @@ function fmtTime(ts: string | null) {
 }
 
 export default function AtendimentosPage() {
+  const isMobile = useIsMobile();
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>('all');
@@ -227,7 +229,7 @@ export default function AtendimentosPage() {
   ];
 
   return (
-    <div style={{ padding: 32, flex: 1, minHeight: 0 }}>
+    <div style={{ padding: isMobile ? 16 : 32, flex: 1, minHeight: 0 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <h1 style={{

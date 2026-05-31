@@ -281,7 +281,7 @@ export default function MeuNumeroPage() {
   const statusLabel = wsStatus === 'connected' ? 'Conectado' : wsStatus === 'connecting' ? 'Conectando…' : 'Desconectado';
 
   return (
-    <div style={{ padding: '32px', flex: 1, maxWidth: tab === 'conversas' ? 'none' : 800, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div style={{ padding: isMobile ? 16 : '32px', flex: 1, maxWidth: tab === 'conversas' ? 'none' : (isMobile ? '100%' : 800), display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Header */}
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--ammoc-ink-900)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
         Meu Número WhatsApp

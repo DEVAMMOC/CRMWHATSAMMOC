@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBase } from '@/lib/api-base';
+import { useIsMobile } from '@/lib/use-is-mobile';
 import type { CanalNumber } from '@crmwhats/types';
 
 const API = getApiBase();
@@ -45,6 +46,7 @@ const inputStyle: React.CSSProperties = {
 
 export default function CanalConfigPage() {
   const supabase = createClient();
+  const isMobile = useIsMobile();
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -160,7 +162,7 @@ export default function CanalConfigPage() {
   }
 
   return (
-    <div style={{ padding: 32, flex: 1, maxWidth: 800 }}>
+    <div style={{ padding: isMobile ? 16 : 32, flex: 1, maxWidth: isMobile ? '100%' : 800 }}>
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--ammoc-ink-900)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
         Canal AMMOC — Configuração
       </h1>
@@ -241,7 +243,7 @@ export default function CanalConfigPage() {
                   const res = testResult[n.id];
                   return (
                     <div key={n.id} style={{ border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginBottom: 10 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)' }}>
                             {n.label || n.display_number}
@@ -271,7 +273,7 @@ export default function CanalConfigPage() {
 
             <div style={{ borderTop: '1px solid var(--ammoc-line-2)', paddingTop: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ammoc-ink-700)', marginBottom: 10 }}>Adicionar número</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
                 <div>
                   <label style={labelStyle}>Phone Number ID</label>
                   <input value={newPhoneNumberId} onChange={e => setNewPhoneNumberId(e.target.value)} placeholder="1098..." style={inputStyle} />

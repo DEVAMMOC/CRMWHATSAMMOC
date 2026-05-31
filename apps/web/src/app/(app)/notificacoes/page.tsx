@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useIsMobile } from '@/lib/use-is-mobile';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ const EVENT_BG: Record<EventType, string> = {
 
 export default function NotificacoesPage() {
   const supabase = createClient();
+  const isMobile = useIsMobile();
 
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,7 +140,7 @@ export default function NotificacoesPage() {
   }, []);
 
   return (
-    <div style={{ padding: '32px', flex: 1 }}>
+    <div style={{ padding: isMobile ? 16 : '32px', flex: 1 }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,

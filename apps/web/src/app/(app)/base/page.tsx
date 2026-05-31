@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useIsMobile } from '@/lib/use-is-mobile';
 import type { ConversationStatus } from '@crmwhats/types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function BasePage() {
   const supabase = createClient();
+  const isMobile = useIsMobile();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [search, setSearch] = useState('');
@@ -135,7 +137,7 @@ export default function BasePage() {
   }, [filtered]);
 
   return (
-    <div style={{ padding: '32px', flex: 1 }}>
+    <div style={{ padding: isMobile ? 16 : '32px', flex: 1 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,

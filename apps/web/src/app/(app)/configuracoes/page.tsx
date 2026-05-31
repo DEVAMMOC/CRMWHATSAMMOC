@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useIsMobile } from '@/lib/use-is-mobile';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,7 @@ const defaultAgent: AgentConfig = {
 
 export default function ConfiguracoesPage() {
   const supabase = createClient();
+  const isMobile = useIsMobile();
 
   const [activeTab, setActiveTab] = useState<'bot' | 'github' | 'agente'>('bot');
 
@@ -273,7 +275,7 @@ export default function ConfiguracoesPage() {
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '32px', flex: 1, maxWidth: 720 }}>
+    <div style={{ padding: isMobile ? 16 : '32px', flex: 1, maxWidth: isMobile ? '100%' : 720 }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1
