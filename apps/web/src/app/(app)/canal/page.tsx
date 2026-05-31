@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBase } from '@/lib/api-base';
+import { useIsMobile } from '@/lib/use-is-mobile';
 import type { CanalConversationStatus } from '@crmwhats/types';
 import { CanalPanel } from './CanalPanel';
 
@@ -57,6 +58,7 @@ function fmtTime(ts: string | null): string {
 
 export default function CanalPage() {
   const supabase = useMemo(() => createClient(), []);
+  const isMobile = useIsMobile();
   const [token, setToken] = useState<string | null>(null);
   const [conversations, setConversations] = useState<CanalConvRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,9 +113,9 @@ export default function CanalPage() {
         Mensagens recebidas pelos números oficiais da AMMOC.
       </p>
 
-      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, height: 'calc(100vh - 180px)' }}>
+      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, height: isMobile ? 'calc(100dvh - 140px)' : 'calc(100vh - 180px)' }}>
         {/* LEFT — conversation list */}
-        <div style={{ width: 380, flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+        <div style={{ width: isMobile ? '100%' : 380, flexShrink: isMobile ? 1 : 0, display: isMobile && selectedId ? 'none' : 'flex', flexDirection: 'column', background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px 0', borderBottom: '1px solid var(--ammoc-line-2)', background: 'var(--ammoc-paper-2)' }}>
             <input
               type="text"
@@ -188,7 +190,7 @@ export default function CanalPage() {
         </div>
 
         {/* RIGHT — panel */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--ammoc-paper)' }}>
+        <div style={{ flex: 1, minWidth: 0, display: isMobile && !selectedId ? 'none' : 'flex', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--ammoc-paper)' }}>
           {selected ? (
             <CanalPanel
               key={selected.id}

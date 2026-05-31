@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { AppUser, Conversation } from '@crmwhats/types';
 import Image from 'next/image';
 import { getApiBase } from '@/lib/api-base';
+import { useIsMobile } from '@/lib/use-is-mobile';
 import { ConversationPanel } from './ConversationPanel';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ const tabBtn = (active: boolean): React.CSSProperties => ({
 export default function MeuNumeroPage() {
   // Fix 1: stable Supabase client reference — no re-creation on every render
   const supabase = useMemo(() => createClient(), []);
+  const isMobile = useIsMobile();
 
   const [user, setUser] = useState<AppUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -403,9 +405,9 @@ export default function MeuNumeroPage() {
 
       {/* ── TAB: CONVERSAS ────────────────────────────────────────────────────── */}
       {tab === 'conversas' && (
-        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, height: 'calc(100vh - 200px)' }}>
+        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, height: isMobile ? 'calc(100dvh - 140px)' : 'calc(100vh - 200px)' }}>
         {/* LEFT column — conversation list */}
-        <div style={{ width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+        <div style={{ width: isMobile ? '100%' : 360, flexShrink: isMobile ? 1 : 0, display: isMobile && selectedConvId ? 'none' : 'flex', flexDirection: 'column', background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
 
           {/* Header with sync button */}
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--ammoc-line-2)', background: 'var(--ammoc-paper-2)' }}>
@@ -617,7 +619,7 @@ export default function MeuNumeroPage() {
         </div>
 
         {/* RIGHT column — conversation panel */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--ammoc-paper)' }}>
+        <div style={{ flex: 1, minWidth: 0, display: isMobile && !selectedConvId ? 'none' : 'flex', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--ammoc-paper)' }}>
           {selectedConvId ? (() => {
             const sel = conversations.find(c => c.id === selectedConvId);
             if (!sel) return null;
