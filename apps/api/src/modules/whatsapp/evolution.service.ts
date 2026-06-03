@@ -171,7 +171,9 @@ export class EvolutionService {
    * Retorna o data-url (`data:<mime>;base64,...`) ou null em falha.
    */
   async downloadMedia(token: string, mediaMessage: unknown): Promise<string | null> {
-    const res = await fetch(`${this.baseUrl}/message/downloadimage`, {
+    // Rota real do Evolution Go é /message/downloadmedia (o swagger anota
+    // "downloadimage", mas essa rota não existe — dá 404). Confirmado ao vivo.
+    const res = await fetch(`${this.baseUrl}/message/downloadmedia`, {
       method: 'POST',
       headers: this.instanceHeaders(token),
       body: JSON.stringify({ message: mediaMessage }),
