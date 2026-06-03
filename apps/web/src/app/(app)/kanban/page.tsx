@@ -17,6 +17,8 @@ interface KanbanConv {
   sector_id: string | null;
   assigned_to: string | null;
   status: CanalConversationStatus;
+  subject: string | null;
+  municipality: string | null;
   last_message_at: string | null;
   closed_at: string | null;
   canal_numbers: { label: string } | null;
@@ -125,6 +127,23 @@ export default function KanbanPage() {
     [conversations, supabase, loadData],
   );
 
+  const assumeConversation = useCallback(
+    async (id: string) => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${API}/api/canal/conversations/${id}/assume`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        await loadData();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Erro ao assumir conversa');
+      }
+    },
+    [supabase, loadData],
+  );
+
   const filtered = conversations.filter(c => {
     const matchSector = !sectorFilter || c.sector_id === sectorFilter;
     const q = search.toLowerCase().trim();
@@ -198,6 +217,28 @@ export default function KanbanPage() {
             </span>
           )}
         </div>
+
+        {(conv.municipality || conv.subject) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8, fontSize: 11, color: 'var(--ammoc-ink-400)' }}>
+            {conv.municipality && <span>📍 {conv.municipality}</span>}
+            {conv.subject && <span>🏷️ {conv.subject}</span>}
+          </div>
+        )}
+
+        {conv.status === 'open' && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); void assumeConversation(conv.id); }}
+            style={{
+              width: '100%', fontSize: 11, fontWeight: 700, padding: '5px 6px', marginBottom: 8,
+              borderRadius: 'var(--radius-sm)', border: '1px solid var(--ammoc-green)',
+              background: 'var(--ammoc-green-100)', color: 'var(--ammoc-green-800)',
+              cursor: 'pointer', boxSizing: 'border-box',
+            }}
+          >
+            ✋ Assumir
+          </button>
+        )}
 
         {/* Fallback de mudança de status (mobile / sem drag) */}
         <select

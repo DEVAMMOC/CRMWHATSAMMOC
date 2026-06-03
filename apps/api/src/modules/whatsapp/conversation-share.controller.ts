@@ -32,11 +32,11 @@ export class ConversationShareController {
     if (conv.owner_user_id !== user.id) throw new ForbiddenException('Sem permissão');
     if (conv.status !== 'nao_salva') return { message: 'Conversa já compartilhada', status: conv.status };
 
-    // Update status to pendente
+    // Compartilhar deixa a conversa ATIVA na hora (sem etapa de aceitação no /recebidos).
     const { error: updateError } = await this.supabase
       .from('conversations')
       .update({
-        status: 'pendente',
+        status: 'ativa',
         shared_at: new Date().toISOString(),
         shared_by: user.id,
       })
@@ -52,7 +52,7 @@ export class ConversationShareController {
       this.logger.error(`generateMd fire-and-forget failed for conversation ${id}`, err);
     });
 
-    return { message: 'Conversa compartilhada com a organização', status: 'pendente' };
+    return { message: 'Conversa compartilhada e visível no painel', status: 'ativa' };
   }
 
   @Post(':id/delegate')

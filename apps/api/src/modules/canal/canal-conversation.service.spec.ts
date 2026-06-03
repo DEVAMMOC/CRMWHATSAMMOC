@@ -103,3 +103,66 @@ describe('CanalConversationService.reply auto-assign', () => {
     expect(updateArg.assigned_to).toBeUndefined();
   });
 });
+
+describe('CanalConversationService.delegate/assume/setMeta', () => {
+  const baseSupa = () => {
+    const calls: Record<string, unknown> = {};
+    const supa = {
+      from: jest.fn((t: string) => {
+        if (t === 'canal_conversations') return {
+          select: () => ({ eq: () => ({ single: async () => ({ data: { assigned_to: null, wa_contact_number: '5549', last_in_at: new Date().toISOString(), canal_numbers: { phone_number_id: 'PN' } }, error: null }) }) }),
+          update: (arg: Record<string, unknown>) => { calls['upd'] = { ...((calls['upd'] as Record<string, unknown>) || {}), ...arg }; return { eq: async () => ({ error: null }) }; },
+        };
+        if (t === 'canal_messages') return { insert: (arg: Record<string, unknown>) => { calls['sysmsg'] = arg; return Promise.resolve({ error: null }); } };
+        if (t === 'users') return { select: () => ({ eq: () => ({ single: async () => ({ data: { name: 'Felipe' } }) }) }) };
+        if (t === 'sectors') return { select: () => ({ eq: () => ({ single: async () => ({ data: { name: 'Tributos' } }) }) }) };
+        if (t === 'notifications') return { insert: async () => ({ error: null }) };
+        return {};
+      }),
+    };
+    return { supa, calls };
+  };
+
+  it('delegate seta status open e gera evento de setor', async () => {
+    const { supa, calls } = baseSupa();
+    const meta = { sendText: jest.fn().mockResolvedValue({ ok: true }) } as unknown as MetaService;
+    await new CanalConversationService(supa as never, meta).delegate('c1', 'sec1', null);
+    expect((calls['upd'] as { status: string }).status).toBe('open');
+    expect((calls['sysmsg'] as { is_system: boolean; content: string }).is_system).toBe(true);
+    expect((calls['sysmsg'] as { content: string }).content).toContain('Tributos');
+  });
+
+  it('assume seta human + assumed_by e evento', async () => {
+    const { supa, calls } = baseSupa();
+    const meta = { sendText: jest.fn().mockResolvedValue({ ok: true }) } as unknown as MetaService;
+    await new CanalConversationService(supa as never, meta).assume('c1', 'u1');
+    const upd = calls['upd'] as { status: string; assumed_by: string };
+    expect(upd.status).toBe('human');
+    expect(upd.assumed_by).toBe('u1');
+    expect((calls['sysmsg'] as { content: string }).content).toContain('assumiu');
+  });
+
+  it('setMeta grava subject/municipality', async () => {
+    const { supa, calls } = baseSupa();
+    await new CanalConversationService(supa as never, {} as unknown as MetaService).setMeta('c1', { subject: 'IPTU', municipality: 'Joaçaba' });
+    const upd = calls['upd'] as { subject: string; municipality: string };
+    expect(upd.subject).toBe('IPTU');
+    expect(upd.municipality).toBe('Joaçaba');
+  });
+
+  it('notifyCitizen NÃO envia fora da janela 24h', async () => {
+    const calls: Record<string, unknown> = {};
+    const supa = { from: jest.fn((t: string) => {
+      if (t === 'canal_conversations') return {
+        select: () => ({ eq: () => ({ single: async () => ({ data: { assigned_to: null, wa_contact_number: '5549', last_in_at: new Date(0).toISOString(), canal_numbers: { phone_number_id: 'PN' } }, error: null }) }) }),
+        update: () => ({ eq: async () => ({ error: null }) }),
+      };
+      if (t === 'canal_messages') return { insert: async () => ({ error: null }) };
+      if (t === 'sectors') return { select: () => ({ eq: () => ({ single: async () => ({ data: { name: 'X' } }) }) }) };
+      return {};
+    }) };
+    const sendText = jest.fn().mockResolvedValue({ ok: true });
+    await new CanalConversationService(supa as never, { sendText } as unknown as MetaService).delegate('c1', 'sec1', null);
+    expect(sendText).not.toHaveBeenCalled();
+  });
+});

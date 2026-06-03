@@ -7,6 +7,7 @@ import { CanalSendMessageDto } from './dto/send-message.dto';
 import { CanalDelegateDto } from './dto/delegate.dto';
 import { CanalStatusDto } from './dto/status.dto';
 import { CanalSendMediaDto } from './dto/send-media.dto';
+import { CanalSetMetaDto } from './dto/set-meta.dto';
 
 @Controller('canal/conversations')
 @UseGuards(AuthGuard)
@@ -44,6 +45,16 @@ export class CanalInboxController {
   @Post(':id/delegate')
   delegate(@Param('id') id: string, @Body() dto: CanalDelegateDto) {
     return this.convs.delegate(id, dto.sectorId ?? null, dto.assignedTo ?? null);
+  }
+
+  @Post(':id/assume')
+  assume(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.convs.assume(id, user.id);
+  }
+
+  @Post(':id/meta')
+  setMeta(@Param('id') id: string, @Body() dto: CanalSetMetaDto) {
+    return this.convs.setMeta(id, { subject: dto.subject, municipality: dto.municipality });
   }
 
   @Post(':id/close')

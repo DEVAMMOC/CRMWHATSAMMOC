@@ -18,6 +18,8 @@ interface CanalConvRow {
   sector_id: string | null;
   assigned_to: string | null;
   status: CanalConversationStatus;
+  subject: string | null;
+  municipality: string | null;
   last_message_at: string | null;
   canal_numbers: { label: string; display_number: string } | null;
 }
@@ -181,6 +183,12 @@ export default function CanalPage() {
                           {badge.label}
                         </span>
                       </div>
+                      {(conv.municipality || conv.subject) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 3, fontSize: 11, color: 'var(--ammoc-ink-400)' }}>
+                          {conv.municipality && <span>📍 {conv.municipality}</span>}
+                          {conv.subject && <span>🏷️ {conv.subject}</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -199,6 +207,8 @@ export default function CanalPage() {
               contactNumber={selected.wa_contact_number}
               numberLabel={selected.canal_numbers?.label ?? ''}
               status={selected.status}
+              subject={selected.subject}
+              municipality={selected.municipality}
               token={token}
               onBack={() => setSelectedId(null)}
               onChanged={() => { if (token) void loadConversations(token); }}

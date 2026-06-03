@@ -229,23 +229,125 @@ export class CanalConversationService {
       .eq('id', conversationId);
   }
 
+  /** Evento interno na timeline (pílula no chat). Não envia nada à Meta. */
+  private async systemEvent(conversationId: string, text: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.supabase.from('canal_messages').insert({
+      conversation_id: conversationId,
+      direction: 'out',
+      content: text,
+      message_type: 'text',
+      is_system: true,
+      sent_at: now,
+    });
+    // Sobe a conversa na lista (igual reply/sendMedia) — p/ a conversa delegada
+    // aparecer no topo do painel do destinatário.
+    await this.supabase
+      .from('canal_conversations')
+      .update({ last_message_at: now })
+      .eq('id', conversationId);
+  }
+
+  /** Aviso ao cidadão por WhatsApp, só se dentro da janela de 24h da Meta. */
+  private async notifyCitizen(conversationId: string, text: string): Promise<void> {
+    const { data } = await this.supabase
+      .from('canal_conversations')
+      .select('wa_contact_number, last_in_at, canal_numbers(phone_number_id)')
+      .eq('id', conversationId)
+      .single();
+    const c = data as unknown as {
+      wa_contact_number: string; last_in_at: string | null;
+      canal_numbers: { phone_number_id: string };
+    } | null;
+    if (!c) return;
+    if (!c.last_in_at || Date.now() - new Date(c.last_in_at).getTime() > 24 * 60 * 60 * 1000) {
+      this.logger.log(`notifyCitizen ${conversationId}: fora da janela 24h — só evento interno`);
+      return;
+    }
+    const r = await this.meta.sendText(c.canal_numbers.phone_number_id, c.wa_contact_number, text);
+    if (!r.ok) this.logger.warn(`notifyCitizen falhou: ${r.error}`);
+  }
+
+  private async userName(id: string | null): Promise<string> {
+    if (!id) return 'a equipe';
+    const { data } = await this.supabase.from('users').select('name').eq('id', id).single();
+    return (data as { name: string } | null)?.name ?? 'a equipe';
+  }
+
+  private async sectorName(id: string | null): Promise<string> {
+    if (!id) return '';
+    const { data } = await this.supabase.from('sectors').select('name').eq('id', id).single();
+    return (data as { name: string } | null)?.name ?? '';
+  }
+
   async delegate(
     conversationId: string,
     sectorId: string | null,
     assignedTo: string | null,
   ): Promise<void> {
+    const { data: prev } = await this.supabase
+      .from('canal_conversations')
+      .select('assigned_to')
+      .eq('id', conversationId)
+      .single();
+    const prevAssigned = (prev as { assigned_to: string | null } | null)?.assigned_to ?? null;
+
     const { error } = await this.supabase
       .from('canal_conversations')
-      .update({ sector_id: sectorId, assigned_to: assignedTo, status: 'human' })
+      .update({ sector_id: sectorId, assigned_to: assignedTo, status: 'open' })
       .eq('id', conversationId);
     if (error) throw new BadRequestException(error.message);
 
-    // Notifica o funcionário (in-app) quando a conversa é delegada a ele.
+    if (assignedTo && prevAssigned && assignedTo !== prevAssigned) {
+      const nome = await this.userName(assignedTo);
+      await this.systemEvent(conversationId, `↪️ Direcionado para ${nome}`);
+      await this.notifyCitizen(conversationId, `Seu atendimento foi direcionado para ${nome}.`).catch(() => {});
+    } else if (sectorId) {
+      const setor = await this.sectorName(sectorId);
+      await this.systemEvent(conversationId, `🔀 Delegado ao setor ${setor}`);
+      await this.notifyCitizen(conversationId, `Seu atendimento foi encaminhado ao setor ${setor}.`).catch(() => {});
+    }
+
     if (assignedTo) {
       await this.notifyAssignment(conversationId, assignedTo, sectorId).catch((e) =>
         this.logger.warn(`Falha ao notificar delegação: ${e instanceof Error ? e.message : String(e)}`),
       );
     }
+  }
+
+  /** Funcionário assume a conversa (Aguardando → Em atendimento). */
+  async assume(conversationId: string, userId: string): Promise<void> {
+    const { data: conv } = await this.supabase
+      .from('canal_conversations')
+      .select('assigned_to')
+      .eq('id', conversationId)
+      .single();
+    if (!conv) throw new NotFoundException('Conversa não encontrada');
+    const now = new Date().toISOString();
+    const { error } = await this.supabase
+      .from('canal_conversations')
+      .update({ status: 'human', assigned_to: userId, assumed_by: userId, assumed_at: now })
+      .eq('id', conversationId);
+    if (error) throw new BadRequestException(error.message);
+    const nome = await this.userName(userId);
+    await this.systemEvent(conversationId, `✋ ${nome} assumiu o atendimento`);
+    await this.notifyCitizen(conversationId, `Olá! Sou ${nome} e vou seguir com o seu atendimento.`).catch(() => {});
+  }
+
+  /** Atualiza assunto/cidade da conversa do Canal. */
+  async setMeta(
+    conversationId: string,
+    patch: { subject?: string | null; municipality?: string | null },
+  ): Promise<void> {
+    const updates: Record<string, unknown> = {};
+    if (patch.subject !== undefined) updates.subject = patch.subject;
+    if (patch.municipality !== undefined) updates.municipality = patch.municipality;
+    if (Object.keys(updates).length === 0) return;
+    const { error } = await this.supabase
+      .from('canal_conversations')
+      .update(updates)
+      .eq('id', conversationId);
+    if (error) throw new BadRequestException(error.message);
   }
 
   /** Cria uma notificação in-app para o funcionário responsável pela conversa. */

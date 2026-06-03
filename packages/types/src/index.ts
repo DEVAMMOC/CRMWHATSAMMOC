@@ -170,6 +170,10 @@ export interface CanalConversation {
   sector_id: string | null;
   assigned_to: string | null;
   status: CanalConversationStatus;
+  subject: string | null;
+  municipality: string | null;
+  assumed_by: string | null;
+  assumed_at: string | null;
   last_in_at: string | null;
   last_message_at: string | null;
   created_at: string;
@@ -182,6 +186,7 @@ export interface CanalMessage {
   content: string;
   message_type: 'text' | 'image' | 'video' | 'audio' | 'document';
   media_url: string | null;
+  is_system: boolean;
   wa_message_id: string | null;
   sent_by: string | null;
   sent_at: string;
