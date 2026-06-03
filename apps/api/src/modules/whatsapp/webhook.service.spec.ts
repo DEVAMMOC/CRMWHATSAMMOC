@@ -4,6 +4,7 @@ import { EvolutionService } from './evolution.service';
 
 const makeEvolution = () => ({
   downloadMedia: jest.fn().mockResolvedValue('data:image/jpeg;base64,aGk='),
+  getStatus: jest.fn().mockResolvedValue({ status: 'connected' }),
 } as unknown as EvolutionService);
 
 const makeSupabase = () => {
@@ -49,6 +50,32 @@ describe('WebhookService', () => {
     await service.handleEvent('tok-1', { event: 'connection.update', data: { state: 'open' } });
     // Verify update was called — from('users') should have been called
     expect(supa.from).toHaveBeenCalledWith('users');
+  });
+
+  it('connection.update open SEM login não marca connected (usa getStatus → connecting)', async () => {
+    const update = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
+    (supa.from as jest.Mock).mockReturnValue({
+      select: () => ({ eq: () => ({ single: jest.fn().mockResolvedValue({ data: { id: 'user-1' }, error: null }) }) }),
+      update,
+    });
+    const evo = { getStatus: jest.fn().mockResolvedValue({ status: 'connecting' }) } as unknown as EvolutionService;
+    service = new WebhookService(supa, evo);
+    await service.handleEvent('tok-1', { event: 'connection.update', data: { state: 'open' } });
+    expect((evo.getStatus as jest.Mock)).toHaveBeenCalledWith('tok-1');
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ whatsapp_status: 'connecting' }));
+  });
+
+  it('connection.update close marca disconnected sem chamar getStatus', async () => {
+    const update = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
+    (supa.from as jest.Mock).mockReturnValue({
+      select: () => ({ eq: () => ({ single: jest.fn().mockResolvedValue({ data: { id: 'user-1' }, error: null }) }) }),
+      update,
+    });
+    const evo = { getStatus: jest.fn() } as unknown as EvolutionService;
+    service = new WebhookService(supa, evo);
+    await service.handleEvent('tok-1', { event: 'connection.update', data: { state: 'close' } });
+    expect((evo.getStatus as jest.Mock)).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ whatsapp_status: 'disconnected' }));
   });
 
   it('grava mensagem de imagem recebida com message_type image', async () => {
