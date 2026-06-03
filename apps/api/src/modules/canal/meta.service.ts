@@ -52,7 +52,14 @@ export class MetaService {
     signatureHeader: string | undefined,
   ): Promise<boolean> {
     const cfg = await this.config();
-    if (!cfg?.app_secret || !signatureHeader) return false;
+    // Fail-open enquanto o App Secret não foi configurado: sem o segredo é
+    // impossível validar a assinatura. Aceita (com aviso) para permitir o setup
+    // inicial; assim que o App Secret é salvo, a validação passa a ser exigida.
+    if (!cfg?.app_secret) {
+      this.logger.warn('Canal webhook: app_secret não configurado — aceitando sem validar assinatura. Configure o App Secret para ativar a validação.');
+      return true;
+    }
+    if (!signatureHeader) return false;
     const expected =
       'sha256=' +
       crypto.createHmac('sha256', cfg.app_secret).update(rawBody).digest('hex');
