@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useIsMobile } from '@/lib/use-is-mobile';
+import { fetchCanalItems, type PanelCanalItem } from '@/lib/canal-list';
+import { getApiBase } from '@/lib/api-base';
 
 interface Conversation {
   id: string;
@@ -83,10 +86,13 @@ function fmtTime(ts: string | null) {
 
 export default function AtendimentosPage() {
   const isMobile = useIsMobile();
+  const router = useRouter();
   const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [canalItems, setCanalItems] = useState<PanelCanalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>('all');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [closingCanalId, setClosingCanalId] = useState<string | null>(null);
 
   // Transfer modal state
   const [transferModal, setTransferModal] = useState<TransferModalState | null>(null);
@@ -116,10 +122,48 @@ export default function AtendimentosPage() {
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) setCurrentUserId(user.id);
+      if (user) {
+        setCurrentUserId(user.id);
+        try {
+          const items = await fetchCanalItems(supabase, { status: 'human', assignedTo: user.id });
+          setCanalItems(items);
+        } catch (err) {
+          console.error('Error loading canal items:', err);
+        }
+      }
       await loadAttendances();
     })();
   }, [loadAttendances]);
+
+  const handleCloseCanal = async (item: PanelCanalItem) => {
+    const confirmed = window.confirm(
+      `Encerrar atendimento do Canal de ${item.name || item.number || 'este contato'}?`
+    );
+    if (!confirmed) return;
+
+    setClosingCanalId(item.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch(`${getApiBase()}/api/canal/conversations/${item.id}/close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      setCanalItems(prev => prev.filter(c => c.id !== item.id));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('Erro ao encerrar atendimento do Canal: ' + msg);
+    } finally {
+      setClosingCanalId(null);
+    }
+  };
 
   const handleClose = async (attendance: Attendance) => {
     const confirmed = window.confirm(
@@ -214,10 +258,14 @@ export default function AtendimentosPage() {
     return a.status === statusFilter;
   });
 
+  // Conversas do Canal em atendimento ('human') aparecem nas abas Todos e Em andamento.
+  const showCanal = statusFilter === 'all' || statusFilter === 'em_andamento';
+  const filteredCanal = showCanal ? canalItems : [];
+
   const counts: Record<AttendanceStatusFilter, number> = {
-    all: attendances.length,
+    all: attendances.length + canalItems.length,
     aberto: attendances.filter(a => a.status === 'aberto').length,
-    em_andamento: attendances.filter(a => a.status === 'em_andamento').length,
+    em_andamento: attendances.filter(a => a.status === 'em_andamento').length + canalItems.length,
     encerrado: attendances.filter(a => a.status === 'encerrado').length,
   };
 
@@ -242,7 +290,7 @@ export default function AtendimentosPage() {
           background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)',
           fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 99,
         }}>
-          {attendances.length}
+          {attendances.length + canalItems.length}
         </span>
       </div>
 
@@ -283,7 +331,7 @@ export default function AtendimentosPage() {
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && filteredCanal.length === 0 ? (
         <div style={{
           background: 'var(--ammoc-paper)', border: '1.5px dashed var(--ammoc-line)',
           borderRadius: 'var(--radius)', padding: '48px 32px', textAlign: 'center',
@@ -295,6 +343,95 @@ export default function AtendimentosPage() {
         </div>
       ) : (
         <div>
+          {/* Atendimentos ativos do Canal atribuídos a mim */}
+          {filteredCanal.map(item => (
+            <div
+              key={`canal-${item.id}`}
+              onClick={() => router.push('/canal')}
+              style={{
+                background: 'var(--ammoc-paper)',
+                border: '1px solid var(--ammoc-line-2)',
+                borderRadius: 'var(--radius)',
+                padding: 16,
+                marginBottom: 8,
+                boxShadow: 'var(--shadow-card)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                cursor: 'pointer',
+              }}
+            >
+              {/* Icon */}
+              <div style={{
+                width: 44, height: 44, borderRadius: '50%',
+                background: 'var(--ammoc-green-100)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20, flexShrink: 0,
+              }}>
+                📡
+              </div>
+
+              {/* Main info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ammoc-ink-900)' }}>
+                    {item.name || item.number || '—'}
+                  </span>
+                  <span style={{
+                    background: 'var(--color-blue-bg)', color: 'var(--color-blue)',
+                    fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 99,
+                  }}>
+                    📡 Canal{item.numberLabel ? ` · ${item.numberLabel}` : ''}
+                  </span>
+                  <span style={{
+                    background: 'var(--color-yellow-bg)', color: 'var(--color-yellow)',
+                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap',
+                  }}>
+                    Em atendimento
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {item.municipality && (
+                    <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                      📍 {item.municipality}
+                    </span>
+                  )}
+                  {item.municipality && item.subject && (
+                    <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>·</span>
+                  )}
+                  {item.subject && (
+                    <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                      🏷️ {item.subject}
+                    </span>
+                  )}
+                  {(item.municipality || item.subject) && (
+                    <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>·</span>
+                  )}
+                  <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                    Última msg: {fmtTime(item.last_message_at)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action: Encerrar (Canal) */}
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleCloseCanal(item); }}
+                  disabled={closingCanalId === item.id}
+                  style={{
+                    background: closingCanalId === item.id ? 'var(--ammoc-line)' : 'var(--ammoc-red)',
+                    color: 'white', border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '6px 14px', fontSize: 13, fontWeight: 600,
+                    cursor: closingCanalId === item.id ? 'default' : 'pointer',
+                  }}
+                >
+                  {closingCanalId === item.id ? 'Encerrando...' : 'Encerrar'}
+                </button>
+              </div>
+            </div>
+          ))}
+
           {filtered.map(att => {
             const contactLabel = att.conversation?.contact_name || att.conversation?.contact_number || '—';
             const municipality = att.municipality || att.conversation?.municipality || null;
