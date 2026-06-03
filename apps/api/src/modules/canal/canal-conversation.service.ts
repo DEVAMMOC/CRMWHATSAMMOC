@@ -179,6 +179,50 @@ export class CanalConversationService {
       .eq('id', conversationId);
   }
 
+  /** Funcionário/admin envia mídia pela inbox → Meta + grava 'out'. */
+  async sendMediaMessage(
+    conversationId: string,
+    userId: string,
+    mediaUrl: string,
+    mediaType: 'image' | 'audio' | 'video' | 'document',
+    fileName: string,
+    caption?: string,
+  ): Promise<void> {
+    const { data: conv } = await this.supabase
+      .from('canal_conversations')
+      .select('wa_contact_number, last_in_at, canal_numbers(phone_number_id)')
+      .eq('id', conversationId)
+      .single();
+    if (!conv) throw new NotFoundException('Conversa não encontrada');
+    const cc = conv as unknown as {
+      wa_contact_number: string;
+      last_in_at: string | null;
+      canal_numbers: { phone_number_id: string };
+    };
+    if (!cc.last_in_at || Date.now() - new Date(cc.last_in_at).getTime() > 24 * 60 * 60 * 1000) {
+      throw new BadRequestException('Fora da janela de 24h da Meta — requer template aprovado (indisponível na Fase 1).');
+    }
+    const result = await this.meta.sendMedia(
+      cc.canal_numbers.phone_number_id, cc.wa_contact_number, mediaType, mediaUrl, caption, fileName,
+    );
+    if (!result.ok) throw new BadRequestException(result.error ?? 'Falha ao enviar mídia pela Meta');
+    const now = new Date().toISOString();
+    await this.supabase.from('canal_messages').insert({
+      conversation_id: conversationId,
+      direction: 'out',
+      content: caption || fileName,
+      message_type: mediaType,
+      media_url: mediaUrl,
+      wa_message_id: result.wa_message_id ?? null,
+      sent_by: userId,
+      sent_at: now,
+    });
+    await this.supabase
+      .from('canal_conversations')
+      .update({ last_message_at: now, status: 'human' })
+      .eq('id', conversationId);
+  }
+
   async delegate(
     conversationId: string,
     sectorId: string | null,
