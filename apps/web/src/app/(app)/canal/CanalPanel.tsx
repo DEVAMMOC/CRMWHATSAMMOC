@@ -25,6 +25,8 @@ interface Props {
   numberLabel: string;
   status: CanalConversationStatus | string;
   token: string | null;
+  subject?: string | null;
+  municipality?: string | null;
   onBack?: () => void;
   onChanged?: () => void;
 }
@@ -41,7 +43,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   closed: { bg: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-400)' },
 };
 
-export function CanalPanel({ conversationId, contactName, contactNumber, numberLabel, status, token, onBack, onChanged }: Props) {
+export function CanalPanel({ conversationId, contactName, contactNumber, numberLabel, status, token, subject, municipality, onBack, onChanged }: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<CanalMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +62,11 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
   const [delegateUserId, setDelegateUserId] = useState('');
   const [delegating, setDelegating] = useState(false);
   const [closing, setClosing] = useState(false);
+
+  // Inline assunto/cidade editing
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [subjectVal, setSubjectVal] = useState('');
+  const [municipalityVal, setMunicipalityVal] = useState('');
 
   const loadMessages = useCallback(async () => {
     if (!token) return;
@@ -86,6 +93,8 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  useEffect(() => { setSubjectVal(subject ?? ''); setMunicipalityVal(municipality ?? ''); }, [subject, municipality]);
 
   // Load sectors + users for the delegation modal (lazily on first open)
   useEffect(() => {
@@ -126,6 +135,29 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
       setText(body);
     }
     setSending(false);
+  }
+
+  async function handleAssume() {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/canal/conversations/${conversationId}/assume`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({ message: res.statusText })); throw new Error(b.message ?? 'Erro ao assumir'); }
+      onChanged?.(); await loadMessages();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Erro ao assumir'); }
+  }
+
+  async function saveMeta() {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/canal/conversations/${conversationId}/meta`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ subject: subjectVal.trim() || undefined, municipality: municipalityVal.trim() || undefined }),
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({ message: res.statusText })); throw new Error(b.message ?? 'Erro ao salvar'); }
+      setEditingMeta(false); onChanged?.();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Erro ao salvar'); }
   }
 
   async function handleFile(file: File) {
@@ -219,6 +251,22 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contactName}</div>
           <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>{contactNumber}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+            {!editingMeta ? (
+              <>
+                {municipalityVal && <span style={{ fontSize: 11, color: 'var(--ammoc-ink-600)' }}>📍 {municipalityVal}</span>}
+                {subjectVal && <span style={{ fontSize: 11, color: 'var(--ammoc-ink-600)' }}>🏷️ {subjectVal}</span>}
+                <button type="button" onClick={() => setEditingMeta(true)} style={{ background: 'none', border: 'none', color: 'var(--ammoc-green-700)', fontSize: 11, cursor: 'pointer', padding: 0 }}>editar assunto/cidade</button>
+              </>
+            ) : (
+              <>
+                <input value={municipalityVal} onChange={e => setMunicipalityVal(e.target.value)} placeholder="Cidade" style={{ fontSize: 12, border: '1px solid var(--ammoc-line)', borderRadius: 6, padding: '3px 6px', width: 110 }} />
+                <input value={subjectVal} onChange={e => setSubjectVal(e.target.value)} placeholder="Assunto" style={{ fontSize: 12, border: '1px solid var(--ammoc-line)', borderRadius: 6, padding: '3px 6px', width: 140 }} />
+                <button type="button" onClick={() => void saveMeta()} style={{ background: 'var(--ammoc-green)', color: 'white', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>salvar</button>
+                <button type="button" onClick={() => { setEditingMeta(false); setSubjectVal(subject ?? ''); setMunicipalityVal(municipality ?? ''); }} style={{ background: 'none', border: 'none', color: 'var(--ammoc-ink-400)', fontSize: 11, cursor: 'pointer' }}>cancelar</button>
+              </>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {numberLabel && (
@@ -229,6 +277,12 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: statusStyle.bg, color: statusStyle.color, whiteSpace: 'nowrap' }}>
             {STATUS_LABEL[status] ?? status}
           </span>
+          {status === 'open' && (
+            <button type="button" onClick={() => void handleAssume()}
+              style={{ background: 'var(--ammoc-green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              ✋ Assumir
+            </button>
+          )}
           <button type="button" onClick={() => setShowDelegate(true)}
             style={{ background: 'var(--ammoc-paper-2)', border: '1.5px solid var(--ammoc-line)', color: 'var(--ammoc-ink-700)', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             🏛️ Delegar
@@ -247,6 +301,13 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
         ) : messages.length === 0 ? (
           <div style={{ margin: 'auto', color: 'var(--ammoc-ink-400)', fontSize: 13, fontStyle: 'italic' }}>Sem mensagens ainda</div>
         ) : messages.map(m => {
+          if (m.is_system) {
+            return (
+              <div key={m.id} style={{ alignSelf: 'center', maxWidth: '80%', background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)', borderRadius: 999, padding: '4px 12px', fontSize: 11.5, fontWeight: 600, textAlign: 'center' }}>
+                {m.content} · {fmtTime(m.sent_at)}
+              </div>
+            );
+          }
           const out = m.direction === 'out';
           return (
             <div key={m.id} style={{ alignSelf: out ? 'flex-end' : 'flex-start', maxWidth: '72%', background: out ? 'var(--ammoc-green-100)' : 'white', border: '1px solid var(--ammoc-line-2)', borderRadius: 10, padding: '6px 10px' }}>
