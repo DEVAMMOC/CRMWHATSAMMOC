@@ -120,8 +120,14 @@ export class EvolutionService {
     });
     if (!res.ok) throw new Error(`Evolution status failed: ${res.status} ${await res.text()}`);
     // Response: { data: { Connected: bool, LoggedIn: bool, Name: "" }, message }
+    // `Connected` = websocket aberto com o servidor do WhatsApp (já fica true numa
+    // instância recém-criada, ANTES de parear). `LoggedIn` = dispositivo realmente
+    // pareado (QR escaneado). Só é "connected" quando LoggedIn; com o websocket
+    // aberto mas sem login, ainda estamos "connecting" (QR pendente).
     const result = await res.json() as { data: { Connected: boolean; LoggedIn: boolean } };
-    return { status: result.data.Connected ? 'connected' : 'disconnected' };
+    const { Connected, LoggedIn } = result.data;
+    const status = LoggedIn ? 'connected' : Connected ? 'connecting' : 'disconnected';
+    return { status };
   }
 
   async sendText(token: string, to: string, text: string): Promise<void> {
