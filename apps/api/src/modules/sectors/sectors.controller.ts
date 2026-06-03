@@ -15,6 +15,7 @@ import { SectorsService } from './sectors.service';
 import { CreateSectorDto } from './dto/create-sector.dto';
 import { UpdateSectorDto } from './dto/update-sector.dto';
 import { AddMemberDto } from './dto/add-member.dto';
+import { SetLeadDto } from './dto/set-lead.dto';
 
 @Controller('sectors')
 @UseGuards(AuthGuard)
@@ -71,5 +72,16 @@ export class SectorsController {
   ) {
     await this.sectors.assertCanManage(user.id);
     return this.sectors.removeMember(sectorId, userId);
+  }
+
+  @Patch(':id/members/:userId/lead')
+  async setMemberLead(
+    @CurrentUser() user: User,
+    @Param('id') sectorId: string,
+    @Param('userId') userId: string,
+    @Body() dto: SetLeadDto,
+  ) {
+    await this.sectors.assertCanManage(user.id);
+    return this.sectors.setMemberLead(sectorId, userId, dto.lead);
   }
 }

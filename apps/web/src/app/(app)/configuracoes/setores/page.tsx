@@ -9,7 +9,7 @@ const API = getApiBase();
 interface Sector {
   id: string; name: string; description: string | null;
   keywords: string[]; color: string; created_at: string;
-  members: { id: string; name: string; email: string }[];
+  members: { id: string; name: string; email: string; lead: boolean }[];
 }
 interface User { id: string; name: string; email: string; }
 
@@ -89,6 +89,10 @@ export default function SetoresPage() {
     await apiFetch(`/api/sectors/${sectorId}/members/${userId}`, token, { method: 'DELETE' });
     await load(token);
   }
+  async function handleSetLead(sectorId: string, userId: string, lead: boolean) {
+    await apiFetch(`/api/sectors/${sectorId}/members/${userId}/lead`, token, { method: 'PATCH', body: JSON.stringify({ lead }) });
+    await load(token);
+  }
 
   return (
     <div style={{ padding: isMobile ? 16 : 32, flex: 1, maxWidth: isMobile ? '100%' : 800 }}>
@@ -125,9 +129,10 @@ export default function SetoresPage() {
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ammoc-ink-600)', marginBottom: 6 }}>Membros ({s.members.length})</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             {s.members.map(m => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--ammoc-green-100)', color: 'var(--ammoc-green-800)', fontSize: 12, fontWeight: 600, padding: '3px 10px 3px 8px', borderRadius: 99 }}>
+              <div key={m.id} title={m.lead ? 'Chefe do setor' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 5, background: m.lead ? 'var(--ammoc-green)' : 'var(--ammoc-green-100)', color: m.lead ? 'white' : 'var(--ammoc-green-800)', fontSize: 12, fontWeight: 600, padding: '3px 10px 3px 8px', borderRadius: 99 }}>
+                <button onClick={() => void handleSetLead(s.id, m.id, !m.lead)} title={m.lead ? 'Remover chefia' : 'Tornar chefe do setor'} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0, opacity: m.lead ? 1 : 0.35 }}>👑</button>
                 {m.name}
-                <button onClick={() => void handleRemoveMember(s.id, m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ammoc-green-700)', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                <button onClick={() => void handleRemoveMember(s.id, m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: m.lead ? 'white' : 'var(--ammoc-green-700)', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
               </div>
             ))}
             <select onChange={e => { if (e.target.value) { void handleAddMember(s.id, e.target.value); e.target.value = ''; } }}

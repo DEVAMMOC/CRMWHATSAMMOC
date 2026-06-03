@@ -144,8 +144,11 @@ export type SectorMemberUser = Omit<
   'evolution_instance_id' | 'evolution_instance_token'
 >;
 
+/** Membro de setor com a flag de chefia (lead = Chefe de Setor). */
+export type SectorMemberWithLead = SectorMemberUser & { lead: boolean };
+
 export interface SectorWithMembers extends Sector {
-  members: SectorMemberUser[];
+  members: SectorMemberWithLead[];
 }
 
 export interface CanalNumber {

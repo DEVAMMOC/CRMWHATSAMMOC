@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import type {
   Sector,
   SectorMemberUser,
+  SectorMemberWithLead,
   SectorWithMembers,
 } from '@crmwhats/types';
 
@@ -55,17 +56,18 @@ export class SectorsService {
 
     const { data: memberships, error: memberError } = await this.supabase
       .from('sector_members')
-      .select(`sector_id, users(${MEMBER_COLUMNS})`)
+      .select(`sector_id, lead, users(${MEMBER_COLUMNS})`)
       .in('sector_id', sectorIds);
     if (memberError) throw new Error(memberError.message);
 
-    const memberMap = new Map<string, SectorMemberUser[]>();
+    const memberMap = new Map<string, SectorMemberWithLead[]>();
     for (const m of (memberships ?? []) as Array<{
       sector_id: string;
+      lead: boolean;
       users: unknown;
     }>) {
       const arr = memberMap.get(m.sector_id) ?? [];
-      if (m.users) arr.push(m.users as SectorMemberUser);
+      if (m.users) arr.push({ ...(m.users as SectorMemberUser), lead: m.lead });
       memberMap.set(m.sector_id, arr);
     }
 
@@ -82,13 +84,13 @@ export class SectorsService {
 
     const { data: memberships, error: memberError } = await this.supabase
       .from('sector_members')
-      .select(`users(${MEMBER_COLUMNS})`)
+      .select(`lead, users(${MEMBER_COLUMNS})`)
       .eq('sector_id', id);
     if (memberError) throw new Error(memberError.message);
 
-    const members = ((memberships ?? []) as Array<{ users: unknown }>)
-      .map((m) => m.users as SectorMemberUser)
-      .filter((u): u is SectorMemberUser => Boolean(u));
+    const members = ((memberships ?? []) as Array<{ lead: boolean; users: unknown }>)
+      .filter((m) => Boolean(m.users))
+      .map((m) => ({ ...(m.users as SectorMemberUser), lead: m.lead }));
 
     return { ...(data as Sector), members };
   }
@@ -141,6 +143,20 @@ export class SectorsService {
     const { error } = await this.supabase
       .from('sector_members')
       .delete()
+      .eq('sector_id', sectorId)
+      .eq('user_id', userId);
+    if (error) throw new Error(error.message);
+  }
+
+  /** Define/remove um membro como Chefe do setor (lead). */
+  async setMemberLead(
+    sectorId: string,
+    userId: string,
+    lead: boolean,
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('sector_members')
+      .update({ lead })
       .eq('sector_id', sectorId)
       .eq('user_id', userId);
     if (error) throw new Error(error.message);
