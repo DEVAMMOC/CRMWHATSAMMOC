@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useIsMobile } from '@/lib/use-is-mobile';
+import { fetchCanalItems, type PanelCanalItem } from '@/lib/canal-list';
+import { getApiBase } from '@/lib/api-base';
 
 interface Conversation {
   id: string;
@@ -43,7 +46,9 @@ function fmtTime(ts: string | null) {
 
 export default function RecebidosPage() {
   const isMobile = useIsMobile();
+  const router = useRouter();
   const [conversations, setConversations] = useState<ConversationWithOwner[]>([]);
+  const [canalItems, setCanalItems] = useState<PanelCanalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [assumingId, setAssumingId] = useState<string | null>(null);
@@ -87,6 +92,16 @@ export default function RecebidosPage() {
     }));
 
     setConversations(enriched);
+
+    // Also load Canal conversations delegated to me and still awaiting (status 'open').
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const items = await fetchCanalItems(supabase, { status: 'open', assignedTo: user.id });
+      setCanalItems(items);
+    } else {
+      setCanalItems([]);
+    }
+
     setLoading(false);
   }, []);
 
@@ -129,6 +144,28 @@ export default function RecebidosPage() {
     }
   };
 
+  const handleAssumeCanal = async (item: PanelCanalItem) => {
+    setAssumingId(item.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${getApiBase()}/api/canal/conversations/${item.id}/assume`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      setCanalItems(prev => prev.filter(c => c.id !== item.id));
+      router.push('/canal');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('Erro ao assumir conversa do Canal: ' + msg);
+    } finally {
+      setAssumingId(null);
+    }
+  };
+
+  const totalReceived = conversations.length + canalItems.length;
+
   return (
     <div style={{ padding: isMobile ? 16 : 32, flex: 1, minHeight: 0 }}>
       {/* Header */}
@@ -143,7 +180,7 @@ export default function RecebidosPage() {
           background: 'var(--color-yellow-bg)', color: 'var(--color-yellow)',
           fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 99,
         }}>
-          {conversations.length} pendente{conversations.length !== 1 ? 's' : ''}
+          {totalReceived} pendente{totalReceived !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -161,7 +198,7 @@ export default function RecebidosPage() {
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
-      ) : conversations.length === 0 ? (
+      ) : totalReceived === 0 ? (
         <div style={{
           background: 'var(--ammoc-paper)', border: '1.5px dashed var(--ammoc-line)',
           borderRadius: 'var(--radius)', padding: '56px 32px', textAlign: 'center',
@@ -259,6 +296,113 @@ export default function RecebidosPage() {
                 }}
               >
                 {assumingId === conv.id ? 'Assumindo...' : 'Assumir atendimento'}
+              </button>
+            </div>
+          ))}
+
+          {/* Canal conversations delegated to me and awaiting */}
+          {canalItems.map(item => (
+            <div
+              key={item.id}
+              onClick={() => router.push('/canal')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') router.push('/canal'); }}
+              style={{
+                background: 'var(--ammoc-paper)',
+                border: '1px solid var(--ammoc-line-2)',
+                borderRadius: 'var(--radius)',
+                padding: 16,
+                marginBottom: 8,
+                boxShadow: 'var(--shadow-card)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                cursor: 'pointer',
+              }}
+            >
+              {/* Avatar */}
+              <div style={{
+                width: 44, height: 44, borderRadius: '50%',
+                background: 'var(--color-yellow-bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20, flexShrink: 0,
+              }}>
+                📡
+              </div>
+
+              {/* Main info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{
+                    fontWeight: 700, fontSize: 14,
+                    color: 'var(--ammoc-ink-900)',
+                  }}>
+                    {item.name}
+                  </span>
+                  <span style={{
+                    background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)',
+                    fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 99,
+                  }}>
+                    📡 Canal
+                  </span>
+                  {item.numberLabel && (
+                    <span style={{
+                      background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)',
+                      fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99,
+                    }}>
+                      {item.numberLabel}
+                    </span>
+                  )}
+                  <span style={{
+                    background: 'var(--color-yellow-bg)', color: 'var(--color-yellow)',
+                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                  }}>
+                    Aguardando
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                    {item.number}
+                  </span>
+                  {item.municipality && (
+                    <>
+                      <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>·</span>
+                      <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                        📍 {item.municipality}
+                      </span>
+                    </>
+                  )}
+                  {item.subject && (
+                    <>
+                      <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>·</span>
+                      <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                        🏷️ {item.subject}
+                      </span>
+                    </>
+                  )}
+                  <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>·</span>
+                  <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                    {fmtTime(item.last_message_at)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Assume button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleAssumeCanal(item); }}
+                disabled={assumingId === item.id}
+                style={{
+                  background: assumingId === item.id ? 'var(--ammoc-line)' : 'var(--ammoc-green)',
+                  color: 'white', border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '7px 16px', fontSize: 13, fontWeight: 600,
+                  cursor: assumingId === item.id ? 'default' : 'pointer',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {assumingId === item.id ? 'Assumindo...' : '✋ Assumir'}
               </button>
             </div>
           ))}
