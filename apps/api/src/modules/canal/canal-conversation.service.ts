@@ -155,6 +155,44 @@ export class CanalConversationService {
       .update({ sector_id: sectorId, assigned_to: assignedTo, status: 'human' })
       .eq('id', conversationId);
     if (error) throw new BadRequestException(error.message);
+
+    // Notifica o funcionário (in-app) quando a conversa é delegada a ele.
+    if (assignedTo) {
+      await this.notifyAssignment(conversationId, assignedTo, sectorId).catch((e) =>
+        this.logger.warn(`Falha ao notificar delegação: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    }
+  }
+
+  /** Cria uma notificação in-app para o funcionário responsável pela conversa. */
+  private async notifyAssignment(
+    conversationId: string,
+    userId: string,
+    sectorId: string | null,
+  ): Promise<void> {
+    const { data: conv } = await this.supabase
+      .from('canal_conversations')
+      .select('wa_contact_name, wa_contact_number')
+      .eq('id', conversationId)
+      .single();
+    let sectorName = '';
+    if (sectorId) {
+      const { data: sec } = await this.supabase
+        .from('sectors')
+        .select('name')
+        .eq('id', sectorId)
+        .single();
+      sectorName = (sec as { name: string } | null)?.name ?? '';
+    }
+    const c = conv as { wa_contact_name: string | null; wa_contact_number: string } | null;
+    const contato = c?.wa_contact_name || c?.wa_contact_number || 'cidadão';
+    await this.supabase.from('notifications').insert({
+      user_id: userId,
+      type: 'delegation',
+      title: 'Nova conversa delegada a você',
+      body: sectorName ? `${contato} — setor ${sectorName}` : `${contato}`,
+      link: '/canal',
+    });
   }
 
   async close(conversationId: string): Promise<void> {

@@ -3,6 +3,16 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useIsMobile } from '@/lib/use-is-mobile';
+import { useRouter } from 'next/navigation';
+
+interface Notif {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read: boolean;
+  created_at: string;
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -45,14 +55,31 @@ const EVENT_BG: Record<EventType, string> = {
 export default function NotificacoesPage() {
   const supabase = createClient();
   const isMobile = useIsMobile();
+  const router = useRouter();
 
+  const [notifs, setNotifs] = useState<Notif[]>([]);
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  async function markRead(n: Notif) {
+    if (!n.read) {
+      await supabase.from('notifications').update({ read: true }).eq('id', n.id);
+      setNotifs(prev => prev.map(x => (x.id === n.id ? { ...x, read: true } : x)));
+    }
+    if (n.link) router.push(n.link);
+  }
+
   useEffect(() => {
     async function load() {
       try {
+        const { data: notifData } = await supabase
+          .from('notifications')
+          .select('id, title, body, link, read, created_at')
+          .order('created_at', { ascending: false })
+          .limit(30);
+        setNotifs((notifData ?? []) as Notif[]);
+
         const [convsRes, transfersRes, closedRes] = await Promise.all([
           supabase
             .from('conversations')
@@ -157,6 +184,26 @@ export default function NotificacoesPage() {
         <div style={{ background: '#FCEBE8', color: '#C0392B', padding: '10px 14px',
           borderRadius: 'var(--radius-sm)', fontSize: 13, marginBottom: 16 }}>
           {error}
+        </div>
+      )}
+
+      {/* Minhas notificações (delegações etc.) */}
+      {notifs.length > 0 && (
+        <div style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)', borderRadius: 'var(--radius)', padding: 12, marginBottom: 16 }}>
+          {notifs.map((n, idx) => (
+            <div key={n.id} onClick={() => void markRead(n)} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 8px', cursor: 'pointer',
+              borderBottom: idx < notifs.length - 1 ? '1px solid var(--ammoc-line-2)' : 'none',
+              background: n.read ? 'transparent' : 'var(--ammoc-green-100)', borderRadius: 8,
+            }}>
+              {!n.read && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ammoc-green)', flexShrink: 0 }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: n.read ? 500 : 700, color: 'var(--ammoc-ink-900)' }}>{n.title}</div>
+                {n.body && <div style={{ fontSize: 12, color: 'var(--ammoc-ink-500)' }}>{n.body}</div>}
+                <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', marginTop: 2 }}>{fmtTime(n.created_at)}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
