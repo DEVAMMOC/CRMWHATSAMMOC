@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { MetaService } from './meta.service';
 import { CanalConfigService } from './canal-config.service';
 import { CanalConversationService } from './canal-conversation.service';
+import { CanalSchedulerService } from './canal-scheduler.service';
 import { CanalWebhookController } from './canal-webhook.controller';
 import { CanalConfigController } from './canal-config.controller';
 import { CanalInboxController } from './canal-inbox.controller';
@@ -40,6 +41,12 @@ import { CanalInboxController } from './canal-inbox.controller';
         supabase: ReturnType<typeof createClient>,
         meta: MetaService,
       ) => new CanalConversationService(supabase, meta),
+    },
+    {
+      provide: CanalSchedulerService,
+      inject: ['SUPABASE_CLIENT'],
+      useFactory: (supabase: ReturnType<typeof createClient>) =>
+        new CanalSchedulerService(supabase),
     },
   ],
   controllers: [
