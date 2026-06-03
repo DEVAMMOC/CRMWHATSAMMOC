@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { MetaService } from './meta.service';
+import { mimeToExt } from '../../common/mime';
 
 @Injectable()
 export class CanalConversationService {
@@ -23,7 +24,11 @@ export class CanalConversationService {
     waMessageId: string;
     content: string;
     tsISO: string;
+    messageType?: 'text' | 'image' | 'video' | 'audio' | 'document';
+    mediaId?: string | null;
+    fileName?: string | null;
   }): Promise<void> {
+    const messageType = params.messageType ?? 'text';
     const { data: num } = await this.supabase
       .from('canal_numbers')
       .select('id, active')
@@ -71,12 +76,41 @@ export class CanalConversationService {
       {
         conversation_id: c.id,
         direction: 'in',
-        content: params.content || '[mídia]',
+        content: params.content || (messageType === 'text' ? '[mídia]' : ''),
+        message_type: messageType,
+        media_url: null,
         wa_message_id: params.waMessageId,
         sent_at: params.tsISO,
       },
       { onConflict: 'wa_message_id', ignoreDuplicates: true },
     );
+
+    if (messageType !== 'text' && params.mediaId) {
+      void this.downloadAndStoreCanal(params.mediaId, c.id, params.waMessageId).catch((e) =>
+        this.logger.warn(`Canal: falha download mídia ${params.waMessageId}: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    }
+  }
+
+  private async downloadAndStoreCanal(
+    mediaId: string,
+    conversationId: string,
+    waMessageId: string,
+  ): Promise<void> {
+    const media = await this.meta.downloadMedia(mediaId);
+    if (!media) { this.logger.warn(`Canal: downloadMedia vazio ${waMessageId}`); return; }
+    const ext = mimeToExt(media.mime);
+    const safeId = waMessageId.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `canal/${conversationId}/${safeId}.${ext}`;
+    const up = await this.supabase.storage
+      .from('wa-media')
+      .upload(path, media.buffer, { contentType: media.mime, upsert: true });
+    if (up.error) { this.logger.error(`Canal: upload storage falhou: ${up.error.message}`); return; }
+    const { data: pub } = this.supabase.storage.from('wa-media').getPublicUrl(path);
+    await this.supabase.from('canal_messages')
+      .update({ media_url: pub.publicUrl })
+      .eq('wa_message_id', waMessageId);
+    this.logger.log(`Canal: mídia salva ${waMessageId} → ${path}`);
   }
 
   async list(): Promise<unknown[]> {
