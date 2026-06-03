@@ -136,7 +136,9 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
       const uid = session?.user?.id;
       if (!uid) throw new Error('Sessão expirada');
       const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `canal-out/${uid}/${conversationId}/${Date.now()}-${safe}`;
+      // UID precisa ser o 1º segmento: a policy de INSERT do bucket wa-media exige
+      // foldername[1] = auth.uid(). Namespaceia o envio do Canal sob o usuário.
+      const path = `${uid}/canal-out/${conversationId}/${Date.now()}-${safe}`;
       const up = await supabase.storage.from('wa-media').upload(path, file, { contentType: file.type, upsert: false });
       if (up.error) throw new Error(up.error.message);
       const { data: pub } = supabase.storage.from('wa-media').getPublicUrl(path);
