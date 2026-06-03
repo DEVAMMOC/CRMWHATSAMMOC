@@ -156,7 +156,11 @@ export function ConversationPanel({ conversationId, contactName, contactNumber, 
               {m.media_url && m.message_type === 'document' && (
                 <a href={m.media_url} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 4, color: 'var(--ammoc-green-700)', fontSize: 13, fontWeight: 600 }}>📎 {m.content}</a>
               )}
-              {(m.message_type === 'text' || (!m.media_url && m.content)) && (
+              {m.message_type !== 'text' && !m.media_url && (
+                <div style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', fontStyle: 'italic', marginBottom: 4 }}>⏳ baixando mídia…</div>
+              )}
+              {/* Documento já mostra o nome no link 📎 — excluído aqui p/ não duplicar. */}
+              {(m.message_type === 'text' || (m.content && m.media_url && m.message_type !== 'document')) && (
                 <div style={{ fontSize: 13, color: 'var(--ammoc-ink-900)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.content}</div>
               )}
               <div style={{ fontSize: 10, color: 'var(--ammoc-ink-400)', textAlign: 'right', marginTop: 2 }}>{fmtTime(m.sent_at)}</div>

@@ -100,6 +100,56 @@ export class MetaService {
     return { ok: true, wa_message_id: body.messages?.[0]?.id };
   }
 
+  /** Baixa mídia recebida: GET /{mediaId} → url temporária → GET url (Bearer). */
+  async downloadMedia(mediaId: string): Promise<{ mime: string; buffer: Buffer } | null> {
+    const cfg = await this.config();
+    if (!cfg?.access_token) return null;
+    const auth = { Authorization: `Bearer ${cfg.access_token}` };
+    const metaRes = await fetch(`${GRAPH}/${mediaId}`, { headers: auth });
+    if (!metaRes.ok) { this.logger.warn(`Meta media meta ${mediaId}: ${metaRes.status}`); return null; }
+    const meta = (await metaRes.json().catch(() => ({}))) as { url?: string; mime_type?: string };
+    if (!meta.url) return null;
+    const binRes = await fetch(meta.url, { headers: auth });
+    if (!binRes.ok) { this.logger.warn(`Meta media bin ${mediaId}: ${binRes.status}`); return null; }
+    const buffer = Buffer.from(await binRes.arrayBuffer());
+    return { mime: meta.mime_type ?? 'application/octet-stream', buffer };
+  }
+
+  /** Envia mídia por link público (image/audio/video/document). */
+  async sendMedia(
+    phoneNumberId: string,
+    to: string,
+    type: 'image' | 'audio' | 'video' | 'document',
+    link: string,
+    caption?: string,
+    filename?: string,
+  ): Promise<MetaSendResult> {
+    const cfg = await this.config();
+    if (!cfg?.access_token)
+      return { ok: false, error: 'Canal não configurado (access_token ausente)' };
+    const media: Record<string, unknown> = { link };
+    if (caption && type !== 'audio') media.caption = caption;
+    if (filename && type === 'document') media.filename = filename;
+    const res = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type,
+        [type]: media,
+      }),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      messages?: Array<{ id: string }>;
+      error?: { message: string };
+    };
+    if (!res.ok)
+      return { ok: false, error: body.error?.message ?? `Graph ${res.status}` };
+    return { ok: true, wa_message_id: body.messages?.[0]?.id };
+  }
+
   /** Testa o token chamando GET /{phone_number_id}. */
   async testConnection(
     phoneNumberId: string,

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { EvolutionService } from './evolution.service';
+import { mimeToExt, parseDataUrl } from '../../common/mime';
 
 interface EvolutionMessageEvent {
   event: string;
@@ -10,7 +12,10 @@ interface EvolutionMessageEvent {
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
 
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly evolution: EvolutionService,
+  ) {}
 
   async handleEvent(instanceToken: string, payload: EvolutionMessageEvent): Promise<void> {
     const { event, data } = payload;
@@ -67,11 +72,25 @@ export class WebhookService {
     const extText = pick(message, 'extendedTextMessage', 'ExtendedTextMessage') as Record<string, unknown> | undefined;
     const imgMsg = pick(message, 'imageMessage', 'ImageMessage') as Record<string, unknown> | undefined;
     const vidMsg = pick(message, 'videoMessage', 'VideoMessage') as Record<string, unknown> | undefined;
+    // Tipos de mídia (whatsmeow proto / Baileys; camelCase no Message interno).
+    const audioMsg = pick(message, 'audioMessage', 'AudioMessage') as Record<string, unknown> | undefined;
+    const docMsg = pick(message, 'documentMessage', 'DocumentMessage') as Record<string, unknown> | undefined;
+    const stickerMsg = pick(message, 'stickerMessage', 'StickerMessage') as Record<string, unknown> | undefined;
+
+    let messageType: 'text' | 'image' | 'video' | 'audio' | 'document' = 'text';
+    if (imgMsg || stickerMsg) messageType = 'image';
+    else if (vidMsg) messageType = 'video';
+    else if (audioMsg) messageType = 'audio';
+    else if (docMsg) messageType = 'document';
+
+    const docFileName = pick(docMsg, 'fileName', 'FileName', 'title', 'Title') as string | undefined;
     const content = (
       (pick(message, 'conversation', 'Conversation') as string | undefined) ??
       (pick(extText, 'text', 'Text') as string | undefined) ??
       (pick(imgMsg, 'caption', 'Caption') as string | undefined) ??
       (pick(vidMsg, 'caption', 'Caption') as string | undefined) ??
+      (pick(docMsg, 'caption', 'Caption') as string | undefined) ??
+      docFileName ??
       ''
     );
 
@@ -148,8 +167,8 @@ export class WebhookService {
       {
         conversation_id: convId,
         direction,
-        content: content || '[mídia]',
-        message_type: 'text',
+        content: content || (messageType === 'text' ? '[mídia]' : ''),
+        message_type: messageType,
         evolution_message_id: messageId,
         sent_at: sentAt,
       },
@@ -157,9 +176,45 @@ export class WebhookService {
     );
     if (msgError) {
       this.logger.error(`DB error upserting message: ${msgError.message}`);
-    } else {
-      this.logger.log(`Message saved — conv:${convId} dir:${direction} contact:${contactNumber}`);
+      return;
     }
+    this.logger.log(`Message saved — conv:${convId} dir:${direction} type:${messageType}`);
+
+    // Mídia recebida: baixa em background e atualiza media_url quando pronto.
+    if (messageType !== 'text' && direction === 'in') {
+      void this.downloadAndStoreEvolution(
+        token, message, messageType,
+        (userRow as { id: string }).id, convId, messageId,
+      ).catch((e) =>
+        this.logger.warn(`Falha download mídia ${messageId}: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    }
+  }
+
+  private async downloadAndStoreEvolution(
+    token: string,
+    message: Record<string, unknown> | undefined,
+    messageType: string,
+    ownerUserId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<void> {
+    const dataUrl = await this.evolution.downloadMedia(token, message);
+    if (!dataUrl) { this.logger.warn(`downloadMedia vazio p/ ${messageId}`); return; }
+    const parsed = parseDataUrl(dataUrl);
+    if (!parsed) { this.logger.warn(`data-url inválido p/ ${messageId}`); return; }
+    const ext = mimeToExt(parsed.mime);
+    const safeId = messageId.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `incoming/${ownerUserId}/${conversationId}/${safeId}.${ext}`;
+    const up = await this.supabase.storage
+      .from('wa-media')
+      .upload(path, parsed.buffer, { contentType: parsed.mime, upsert: true });
+    if (up.error) { this.logger.error(`upload storage falhou: ${up.error.message}`); return; }
+    const { data: pub } = this.supabase.storage.from('wa-media').getPublicUrl(path);
+    await this.supabase.from('messages')
+      .update({ media_url: pub.publicUrl })
+      .eq('evolution_message_id', messageId);
+    this.logger.log(`Mídia salva ${messageId} → ${path}`);
   }
 
   /**

@@ -180,6 +180,8 @@ export interface CanalMessage {
   conversation_id: string;
   direction: 'in' | 'out';
   content: string;
+  message_type: 'text' | 'image' | 'video' | 'audio' | 'document';
+  media_url: string | null;
   wa_message_id: string | null;
   sent_by: string | null;
   sent_at: string;

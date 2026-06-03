@@ -49,21 +49,37 @@ export class CanalWebhookController {
             timestamp: string;
             type: string;
             text?: { body: string };
+            image?: { id: string; caption?: string; mime_type?: string };
+            video?: { id: string; caption?: string; mime_type?: string };
+            audio?: { id: string; mime_type?: string };
+            document?: { id: string; caption?: string; filename?: string; mime_type?: string };
+            sticker?: { id: string; mime_type?: string };
           }>;
         };
         const phoneNumberId = value.metadata?.phone_number_id ?? '';
         const name = value.contacts?.[0]?.profile?.name ?? null;
         for (const m of value.messages ?? []) {
-          const content =
-            m.type === 'text' ? (m.text?.body ?? '') : '[mídia]';
           const tsISO = new Date(Number(m.timestamp) * 1000).toISOString();
+          const TYPE_MAP: Record<string, 'image' | 'video' | 'audio' | 'document'> = {
+            image: 'image', video: 'video', audio: 'audio', document: 'document', sticker: 'image',
+          };
+          const messageType = TYPE_MAP[m.type];
+          if (!messageType) {
+            // texto (ou tipo não suportado → guarda como texto/placeholder)
+            await this.convs.ingestInbound({
+              phoneNumberId, from: m.from, name,
+              waMessageId: m.id, content: m.type === 'text' ? (m.text?.body ?? '') : '[mídia]',
+              tsISO,
+            });
+            continue;
+          }
+          const media = (m as Record<string, { id?: string; caption?: string; filename?: string }>)[m.type];
+          const caption = media?.caption ?? '';
+          const fileName = media?.filename ?? null;
           await this.convs.ingestInbound({
-            phoneNumberId,
-            from: m.from,
-            name,
-            waMessageId: m.id,
-            content,
-            tsISO,
+            phoneNumberId, from: m.from, name,
+            waMessageId: m.id, content: caption || fileName || '',
+            tsISO, messageType, mediaId: media?.id ?? null, fileName,
           });
         }
       }

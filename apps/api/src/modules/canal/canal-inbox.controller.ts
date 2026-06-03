@@ -6,6 +6,7 @@ import { CanalConversationService } from './canal-conversation.service';
 import { CanalSendMessageDto } from './dto/send-message.dto';
 import { CanalDelegateDto } from './dto/delegate.dto';
 import { CanalStatusDto } from './dto/status.dto';
+import { CanalSendMediaDto } from './dto/send-media.dto';
 
 @Controller('canal/conversations')
 @UseGuards(AuthGuard)
@@ -29,6 +30,15 @@ export class CanalInboxController {
     @Body() dto: CanalSendMessageDto,
   ) {
     return this.convs.reply(id, user.id, dto.text);
+  }
+
+  @Post(':id/send-media')
+  sendMedia(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: CanalSendMediaDto,
+  ) {
+    return this.convs.sendMediaMessage(id, user.id, dto.mediaUrl, dto.mediaType, dto.fileName, dto.caption);
   }
 
   @Post(':id/delegate')
