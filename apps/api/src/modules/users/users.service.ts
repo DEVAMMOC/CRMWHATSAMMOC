@@ -72,11 +72,13 @@ export class UsersService {
   }
 
   async deleteUser(callerId: string, targetId: string): Promise<void> {
-    const { data: caller } = await this.supabase
+    const { data: caller, error: callerErr } = await this.supabase
       .from('users')
       .select('role')
       .eq('id', callerId)
       .single();
+    // Surface infra errors (não confundir falha de DB com "não é admin").
+    if (callerErr && callerErr.code !== 'PGRST116') throw new Error(callerErr.message);
     if (!caller || (caller as { role: string }).role !== 'admin') {
       throw new ForbiddenException(
         'Apenas administradores podem excluir usuários',
@@ -85,15 +87,19 @@ export class UsersService {
     if (callerId === targetId) {
       throw new BadRequestException('Você não pode excluir a si mesmo');
     }
-    const { data: target } = await this.supabase
+    const { data: target, error: targetErr } = await this.supabase
       .from('users')
       .select('role, evolution_instance_id')
       .eq('id', targetId)
       .single();
+    if (targetErr && targetErr.code !== 'PGRST116') throw new Error(targetErr.message);
     if (!target) throw new NotFoundException('Usuário não encontrado');
     const t = target as { role: string; evolution_instance_id: string | null };
 
     if (t.role === 'admin') {
+      // Nota: a checagem (count seguido de delete) não é atômica — em uma
+      // exclusão concorrente de dois admins há um TOCTOU teórico. Aceitável
+      // para a escala desta org (poucos admins); fix mais forte seria no DB.
       const { count } = await this.supabase
         .from('users')
         .select('id', { count: 'exact', head: true })
@@ -117,13 +123,19 @@ export class UsersService {
       }
     }
 
+    // Ordem: remove do auth ANTES de public.users. Não há FK/trigger ligando as
+    // duas tabelas, então em falha parcial é melhor sobrar uma linha public sem
+    // identidade (não consegue logar e re-executar converge) do que um usuário
+    // que ainda autentica sem perfil. `deleteAuthUser` é idempotente (tolera
+    // "not found"), então re-rodar a exclusão sempre converge.
+    await this.supabaseAdmin.deleteAuthUser(targetId);
+
     const { error: delErr } = await this.supabase
       .from('users')
       .delete()
       .eq('id', targetId);
     if (delErr) throw new Error(delErr.message);
 
-    await this.supabaseAdmin.deleteAuthUser(targetId);
     this.logger.log(`Usuário ${targetId} excluído por ${callerId}`);
   }
 }

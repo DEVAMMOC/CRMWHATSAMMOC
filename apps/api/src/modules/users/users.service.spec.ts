@@ -112,4 +112,40 @@ describe('deleteUser', () => {
     expect(del).toHaveBeenCalled();
     expect(admin.deleteAuthUser).toHaveBeenCalledWith('target');
   });
+
+  // Mock que serve tanto os lookups (.eq('id',val).single()) quanto o count de
+  // admins (.eq('role','admin') aguardado direto → { count }).
+  const makeAdminTargetSupa = (adminCount: number, del: jest.Mock) => ({
+    from: jest.fn(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn((col: string, val: string) => {
+          if (col === 'role' && val === 'admin') {
+            return Promise.resolve({ count: adminCount });
+          }
+          return {
+            single: async () => val === 'caller'
+              ? { data: { role: 'admin' }, error: null }
+              : { data: { role: 'admin', evolution_instance_id: null }, error: null },
+          };
+        }),
+      })),
+      delete: del,
+    })),
+  });
+
+  it('bloqueia excluir o último admin', async () => {
+    const del = jest.fn(() => ({ eq: async () => ({ error: null }) }));
+    const svc = new UsersService(makeAdminTargetSupa(1, del) as never, mockAdmin as never, mockEvo as never);
+    await expect(svc.deleteUser('caller', 'target')).rejects.toThrow('último administrador');
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('permite excluir um admin quando há outros', async () => {
+    const del = jest.fn(() => ({ eq: async () => ({ error: null }) }));
+    const admin = { deleteAuthUser: jest.fn().mockResolvedValue(undefined) };
+    const svc = new UsersService(makeAdminTargetSupa(2, del) as never, admin as never, mockEvo as never);
+    await svc.deleteUser('caller', 'target');
+    expect(del).toHaveBeenCalled();
+    expect(admin.deleteAuthUser).toHaveBeenCalledWith('target');
+  });
 });

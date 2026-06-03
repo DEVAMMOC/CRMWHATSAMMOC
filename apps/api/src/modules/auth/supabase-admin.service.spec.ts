@@ -16,4 +16,13 @@ describe('SupabaseAdminService.deleteAuthUser', () => {
     del.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
     await expect(svc.deleteAuthUser('uid-2')).rejects.toThrow('boom');
   });
+
+  it('é idempotente: tolera erro 404 (usuário já removido)', async () => {
+    const svc = new SupabaseAdminService(cfg);
+    const del = jest.fn().mockResolvedValue({ data: null, error: { message: 'User not found', status: 404 } });
+    (svc as unknown as { client: { auth: { admin: { deleteUser: jest.Mock } } } }).client = {
+      auth: { admin: { deleteUser: del } },
+    };
+    await expect(svc.deleteAuthUser('gone')).resolves.toBeUndefined();
+  });
 });

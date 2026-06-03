@@ -18,8 +18,12 @@ export class SupabaseAdminService {
     return this.client.auth.getUser(token);
   }
 
+  /** Remove o usuário do auth. Idempotente: tolera "não encontrado" (status 404),
+   *  para que re-executar a exclusão de um usuário parcialmente removido convirja. */
   async deleteAuthUser(id: string): Promise<void> {
     const { error } = await this.client.auth.admin.deleteUser(id);
-    if (error) throw new Error(error.message);
+    if (error && (error as { status?: number }).status !== 404) {
+      throw new Error(error.message);
+    }
   }
 }
