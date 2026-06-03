@@ -231,14 +231,21 @@ export class CanalConversationService {
 
   /** Evento interno na timeline (pílula no chat). Não envia nada à Meta. */
   private async systemEvent(conversationId: string, text: string): Promise<void> {
+    const now = new Date().toISOString();
     await this.supabase.from('canal_messages').insert({
       conversation_id: conversationId,
       direction: 'out',
       content: text,
       message_type: 'text',
       is_system: true,
-      sent_at: new Date().toISOString(),
+      sent_at: now,
     });
+    // Sobe a conversa na lista (igual reply/sendMedia) — p/ a conversa delegada
+    // aparecer no topo do painel do destinatário.
+    await this.supabase
+      .from('canal_conversations')
+      .update({ last_message_at: now })
+      .eq('id', conversationId);
   }
 
   /** Aviso ao cidadão por WhatsApp, só se dentro da janela de 24h da Meta. */

@@ -111,7 +111,7 @@ describe('CanalConversationService.delegate/assume/setMeta', () => {
       from: jest.fn((t: string) => {
         if (t === 'canal_conversations') return {
           select: () => ({ eq: () => ({ single: async () => ({ data: { assigned_to: null, wa_contact_number: '5549', last_in_at: new Date().toISOString(), canal_numbers: { phone_number_id: 'PN' } }, error: null }) }) }),
-          update: (arg: Record<string, unknown>) => { calls['upd'] = arg; return { eq: async () => ({ error: null }) }; },
+          update: (arg: Record<string, unknown>) => { calls['upd'] = { ...((calls['upd'] as Record<string, unknown>) || {}), ...arg }; return { eq: async () => ({ error: null }) }; },
         };
         if (t === 'canal_messages') return { insert: (arg: Record<string, unknown>) => { calls['sysmsg'] = arg; return Promise.resolve({ error: null }); } };
         if (t === 'users') return { select: () => ({ eq: () => ({ single: async () => ({ data: { name: 'Felipe' } }) }) }) };
