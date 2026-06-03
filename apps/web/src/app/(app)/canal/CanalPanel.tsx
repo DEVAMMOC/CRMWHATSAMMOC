@@ -7,6 +7,13 @@ import type { CanalMessage, CanalConversationStatus } from '@crmwhats/types';
 
 const API = getApiBase();
 
+function mediaTypeFromMime(mime: string): 'image' | 'video' | 'audio' | 'document' {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'document';
+}
+
 interface Sector { id: string; name: string; color?: string }
 interface OrgUser { id: string; name: string }
 
@@ -40,6 +47,8 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Delegation modal (mirrors conversa/[id])
@@ -116,6 +125,36 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
       setText(body);
     }
     setSending(false);
+  }
+
+  async function handleFile(file: File) {
+    if (!token) return;
+    if (file.size > 26214400) { setError('Arquivo excede 25 MB'); return; }
+    setUploading(true); setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) throw new Error('Sessão expirada');
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `canal-out/${uid}/${conversationId}/${Date.now()}-${safe}`;
+      const up = await supabase.storage.from('wa-media').upload(path, file, { contentType: file.type, upsert: false });
+      if (up.error) throw new Error(up.error.message);
+      const { data: pub } = supabase.storage.from('wa-media').getPublicUrl(path);
+      const res = await fetch(`${API}/api/canal/conversations/${conversationId}/send-media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mediaUrl: pub.publicUrl, mediaType: mediaTypeFromMime(file.type), fileName: file.name, caption: text.trim() || undefined }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(errBody.message ?? 'Erro ao enviar mídia');
+      }
+      setText('');
+      await loadMessages();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao enviar mídia');
+    }
+    setUploading(false);
   }
 
   async function handleDelegate() {
@@ -208,7 +247,25 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
           const out = m.direction === 'out';
           return (
             <div key={m.id} style={{ alignSelf: out ? 'flex-end' : 'flex-start', maxWidth: '72%', background: out ? 'var(--ammoc-green-100)' : 'white', border: '1px solid var(--ammoc-line-2)', borderRadius: 10, padding: '6px 10px' }}>
-              <div style={{ fontSize: 13, color: 'var(--ammoc-ink-900)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.content}</div>
+              {m.media_url && m.message_type === 'image' && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={m.media_url} alt={m.content} style={{ maxWidth: 240, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+              )}
+              {m.media_url && m.message_type === 'video' && (
+                <video src={m.media_url} controls style={{ maxWidth: 240, borderRadius: 6, display: 'block', marginBottom: 4 }} />
+              )}
+              {m.media_url && m.message_type === 'audio' && (
+                <audio src={m.media_url} controls style={{ display: 'block', marginBottom: 4 }} />
+              )}
+              {m.media_url && m.message_type === 'document' && (
+                <a href={m.media_url} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 4, color: 'var(--ammoc-green-700)', fontSize: 13, fontWeight: 600 }}>📎 {m.content || 'documento'}</a>
+              )}
+              {m.message_type !== 'text' && !m.media_url && (
+                <div style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', fontStyle: 'italic', marginBottom: 4 }}>⏳ baixando mídia…</div>
+              )}
+              {(m.message_type === 'text' || (m.content && m.media_url)) && (
+                <div style={{ fontSize: 13, color: 'var(--ammoc-ink-900)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.content}</div>
+              )}
               <div style={{ fontSize: 10, color: 'var(--ammoc-ink-400)', textAlign: 'right', marginTop: 2 }}>{fmtTime(m.sent_at)}</div>
             </div>
           );
@@ -224,6 +281,17 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
 
       {/* Composer */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--ammoc-line-2)', background: 'var(--ammoc-paper-2)' }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,audio/*,application/pdf,application/*"
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }}
+        />
+        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Anexar mídia"
+          style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 16, cursor: uploading ? 'default' : 'pointer', flexShrink: 0 }}>
+          {uploading ? '…' : '📎'}
+        </button>
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
