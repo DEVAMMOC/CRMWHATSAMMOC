@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBase } from '@/lib/api-base';
 import { useIsMobile } from '@/lib/use-is-mobile';
+import { fetchCanalItems, type PanelCanalItem } from '@/lib/canal-list';
 
 type ConversationStatus = 'nao_salva' | 'pendente' | 'ativa' | 'encerrada';
 
@@ -47,6 +48,24 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const CANAL_STATUS: Record<string, { label: string; bg: string; color: string }> = {
+  open:   { label: 'Aguardando',     bg: 'var(--color-blue-bg)',   color: 'var(--color-blue)' },
+  human:  { label: 'Em atendimento', bg: 'var(--color-yellow-bg)', color: 'var(--color-yellow)' },
+  closed: { label: 'Encerrada',      bg: 'var(--ammoc-line-2)',    color: 'var(--ammoc-ink-400)' },
+};
+
+function CanalStatusBadge({ status }: { status: string }) {
+  const s = CANAL_STATUS[status] ?? { label: status, bg: 'var(--ammoc-line-2)', color: 'var(--ammoc-ink-400)' };
+  return (
+    <span style={{
+      background: s.bg, color: s.color, fontSize: 11, fontWeight: 700,
+      padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap',
+    }}>
+      {s.label}
+    </span>
+  );
+}
+
 function fmtTime(ts: string | null) {
   if (!ts) return '—';
   const d = new Date(ts);
@@ -64,6 +83,7 @@ const API = getApiBase();
 
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [canalItems, setCanalItems] = useState<PanelCanalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -94,6 +114,15 @@ export default function DashboardPage() {
       console.error('Error loading conversations:', error);
     } else {
       setConversations((data as Conversation[]) ?? []);
+    }
+
+    // Conversas do Canal visíveis para mim (RLS já escopa a visibilidade) —
+    // histórico completo, sem filtro de status/responsável.
+    try {
+      const items = await fetchCanalItems(supabase);
+      setCanalItems(items);
+    } catch (e) {
+      console.error('Error loading canal conversations:', e);
     }
     setLoading(false);
   }, []);
@@ -215,10 +244,11 @@ export default function DashboardPage() {
     }
   };
 
-  const filtered = conversations.filter(c => {
+  const term = searchTerm.toLowerCase();
+
+  const filteredPersonal = conversations.filter(c => {
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
     const matchSector = !sectorFilter || c.sector_id === sectorFilter;
-    const term = searchTerm.toLowerCase();
     const matchSearch =
       !term ||
       (c.contact_name ?? '').toLowerCase().includes(term) ||
@@ -227,8 +257,34 @@ export default function DashboardPage() {
     return matchStatus && matchSector && matchSearch;
   });
 
+  // Linhas do Canal só aparecem na visão "Todas" (os filtros de status são
+  // específicos das conversas pessoais). Setor e busca continuam aplicando.
+  const filteredCanal = statusFilter !== 'all' ? [] : canalItems.filter(c => {
+    const matchSector = !sectorFilter || c.sector_id === sectorFilter;
+    const matchSearch =
+      !term ||
+      c.name.toLowerCase().includes(term) ||
+      c.number.toLowerCase().includes(term) ||
+      (c.municipality ?? '').toLowerCase().includes(term) ||
+      (c.subject ?? '').toLowerCase().includes(term);
+    return matchSector && matchSearch;
+  });
+
+  type Row =
+    | { kind: 'personal'; ts: number; conv: Conversation }
+    | { kind: 'canal'; ts: number; item: PanelCanalItem };
+
+  const tsOf = (v: string | null) => (v ? new Date(v).getTime() : 0);
+
+  const rows: Row[] = [
+    ...filteredPersonal.map((conv): Row => ({ kind: 'personal', ts: tsOf(conv.last_message_at), conv })),
+    ...filteredCanal.map((item): Row => ({ kind: 'canal', ts: tsOf(item.last_message_at), item })),
+  ].sort((a, b) => b.ts - a.ts);
+
+  const totalCount = conversations.length + canalItems.length;
+
   const counts: Record<StatusFilter, number> = {
-    all: conversations.length,
+    all: totalCount,
     pendente: conversations.filter(c => c.status === 'pendente').length,
     ativa: conversations.filter(c => c.status === 'ativa').length,
     encerrada: conversations.filter(c => c.status === 'encerrada').length,
@@ -255,7 +311,7 @@ export default function DashboardPage() {
           background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)',
           fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 99,
         }}>
-          {conversations.length}
+          {totalCount}
         </span>
         <div style={{ flex: 1 }} />
         <button
@@ -386,7 +442,7 @@ export default function DashboardPage() {
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div style={{
           background: 'var(--ammoc-paper)', border: '1.5px dashed var(--ammoc-line)',
           borderRadius: 'var(--radius)', padding: '48px 32px', textAlign: 'center',
@@ -398,7 +454,97 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div>
-          {filtered.map(conv => (
+          {rows.map(row => row.kind === 'canal' ? (
+            <div
+              key={`canal-${row.item.id}`}
+              onClick={() => router.push('/canal')}
+              style={{
+                background: 'var(--ammoc-paper)',
+                border: '1px solid var(--ammoc-line-2)',
+                borderRadius: 'var(--radius)',
+                padding: 16,
+                marginBottom: 8,
+                boxShadow: 'var(--shadow-card)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                cursor: 'pointer',
+                transition: 'border-color 0.15s, box-shadow 0.15s',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--ammoc-green)';
+                (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(0,0,0,0.1)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--ammoc-line-2)';
+                (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-card)';
+              }}
+            >
+              {/* Icon */}
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%',
+                background: 'var(--color-blue-bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, flexShrink: 0,
+              }}>
+                📡
+              </div>
+
+              {/* Main info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{
+                    fontWeight: 700, fontSize: 14,
+                    color: 'var(--ammoc-ink-900)', whiteSpace: 'nowrap',
+                  }}>
+                    {row.item.name}
+                  </span>
+                  <span style={{
+                    background: 'var(--color-blue-bg)', color: 'var(--color-blue)',
+                    fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 99,
+                  }}>
+                    📡 Canal{row.item.numberLabel ? ` · ${row.item.numberLabel}` : ''}
+                  </span>
+                  {row.item.municipality && (
+                    <span style={{
+                      background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)',
+                      fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99,
+                    }}>
+                      📍 {row.item.municipality}
+                    </span>
+                  )}
+                  {row.item.subject && (
+                    <span style={{
+                      background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)',
+                      fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99,
+                    }}>
+                      🏷️ {row.item.subject}
+                    </span>
+                  )}
+                  <CanalStatusBadge status={row.item.status} />
+                  {row.item.sector_id && (() => {
+                    const sec = sectors.find(s => s.id === row.item.sector_id);
+                    return sec ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: sec.color + '22', color: sec.color, border: `1px solid ${sec.color}44`, whiteSpace: 'nowrap' }}>
+                        🏛️ {sec.name}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                    {row.item.number}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>·</span>
+                  <span style={{ fontSize: 12, color: 'var(--ammoc-ink-400)' }}>
+                    {fmtTime(row.item.last_message_at)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (() => {
+            const conv = row.conv;
+            return (
             <div
               key={conv.id}
               onClick={() => router.push(`/conversa/${conv.id}`)}
@@ -490,7 +636,8 @@ export default function DashboardPage() {
                 </button>
               )}
             </div>
-          ))}
+            );
+          })())}
         </div>
       )}
     </div>
