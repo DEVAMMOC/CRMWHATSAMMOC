@@ -30,7 +30,7 @@ const WHATSAPP_NAV: NavItem[] = [
 ];
 
 const ORG_NAV: NavItem[] = [
-  { icon: '🏛️', label: 'Base AMMOC', href: '/base' },
+  { icon: '📇', label: 'Contatos', href: '/contatos' },
   { icon: '👥', label: 'Equipe', href: '/equipe' },
 ];
 

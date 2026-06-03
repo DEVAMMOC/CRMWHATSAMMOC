@@ -62,7 +62,7 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export default function BasePage() {
+export default function ContatosPage() {
   const supabase = createClient();
   const isMobile = useIsMobile();
 
@@ -142,7 +142,7 @@ export default function BasePage() {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,
           color: 'var(--ammoc-ink-900)', margin: 0, letterSpacing: '-0.02em' }}>
-          Base AMMOC
+          Contatos
         </h1>
         {!loading && (
           <span style={{ fontSize: 13, color: 'var(--ammoc-ink-400)', fontFamily: 'var(--font-body)' }}>
