@@ -26,9 +26,11 @@ import { ConversationShareController } from './conversation-share.controller';
     },
     {
       provide: WebhookService,
-      inject: ['SUPABASE_CLIENT'],
-      useFactory: (supabase: ReturnType<typeof createClient>) =>
-        new WebhookService(supabase),
+      inject: ['SUPABASE_CLIENT', EvolutionService],
+      useFactory: (
+        supabase: ReturnType<typeof createClient>,
+        evo: EvolutionService,
+      ) => new WebhookService(supabase, evo),
     },
     {
       provide: ContextService,

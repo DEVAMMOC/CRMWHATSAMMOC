@@ -1,5 +1,10 @@
 import { WebhookService } from './webhook.service';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { EvolutionService } from './evolution.service';
+
+const makeEvolution = () => ({
+  downloadMedia: jest.fn().mockResolvedValue('data:image/jpeg;base64,aGk='),
+} as unknown as EvolutionService);
 
 const makeSupabase = () => {
   const upsert  = jest.fn().mockResolvedValue({ error: null });
@@ -24,7 +29,7 @@ describe('WebhookService', () => {
 
   beforeEach(() => {
     supa    = makeSupabase();
-    service = new WebhookService(supa);
+    service = new WebhookService(supa, makeEvolution());
   });
 
   it('handleEvent ignores unknown event types without throwing', async () => {
@@ -44,5 +49,33 @@ describe('WebhookService', () => {
     await service.handleEvent('tok-1', { event: 'connection.update', data: { state: 'open' } });
     // Verify update was called — from('users') should have been called
     expect(supa.from).toHaveBeenCalledWith('users');
+  });
+
+  it('grava mensagem de imagem recebida com message_type image', async () => {
+    const single = jest.fn().mockResolvedValueOnce({ data: { id: 'user-1' }, error: null }); // users lookup
+    const upsertConv = jest.fn().mockReturnValue({
+      select: () => ({ single: jest.fn().mockResolvedValue({ data: { id: 'conv-1' }, error: null }) }),
+    });
+    const upsertMsg = jest.fn().mockResolvedValue({ error: null });
+    const update = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
+    (supa.from as jest.Mock).mockImplementation((table: string) => {
+      if (table === 'users') return { select: () => ({ eq: () => ({ single }) }) };
+      if (table === 'conversations') return { upsert: upsertConv };
+      if (table === 'messages') return { upsert: upsertMsg, update };
+      return {};
+    });
+
+    await service.handleEvent('tok-1', {
+      event: 'Message',
+      data: {
+        Info: { Chat: '5547999@s.whatsapp.net', ID: 'M1', IsFromMe: false, PushName: 'Fulano' },
+        Message: { imageMessage: { caption: 'oi', url: 'x', mediaKey: 'k' } },
+      },
+    });
+
+    expect(upsertMsg).toHaveBeenCalledWith(
+      expect.objectContaining({ message_type: 'image', content: 'oi' }),
+      expect.anything(),
+    );
   });
 });
