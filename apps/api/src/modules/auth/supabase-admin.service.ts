@@ -17,4 +17,9 @@ export class SupabaseAdminService {
   async getUser(token: string): Promise<UserResponse> {
     return this.client.auth.getUser(token);
   }
+
+  async deleteAuthUser(id: string): Promise<void> {
+    const { error } = await this.client.auth.admin.deleteUser(id);
+    if (error) throw new Error(error.message);
+  }
 }
