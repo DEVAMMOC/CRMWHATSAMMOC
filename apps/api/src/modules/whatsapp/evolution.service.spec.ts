@@ -98,4 +98,28 @@ describe('EvolutionService', () => {
       }),
     );
   });
+
+  it('getStatus: LoggedIn=true → connected', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { Connected: true, LoggedIn: true, Name: 'Max' }, message: 'success' }),
+    } as unknown as Response);
+    expect((await service.getStatus('tok-1')).status).toBe('connected');
+  });
+
+  it('getStatus: instância nova (Connected=true, LoggedIn=false) → connecting (não connected)', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { Connected: true, LoggedIn: false, Name: '' }, message: 'success' }),
+    } as unknown as Response);
+    expect((await service.getStatus('tok-1')).status).toBe('connecting');
+  });
+
+  it('getStatus: Connected=false → disconnected', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { Connected: false, LoggedIn: false, Name: '' }, message: 'success' }),
+    } as unknown as Response);
+    expect((await service.getStatus('tok-1')).status).toBe('disconnected');
+  });
 });
