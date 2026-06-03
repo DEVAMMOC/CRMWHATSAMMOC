@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useIsMobile } from '@/lib/use-is-mobile';
+import { getApiBase } from '@/lib/api-base';
 import type { AppUser, UserRole } from '@crmwhats/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -48,15 +49,29 @@ function Avatar({ name }: { name: string }) {
 function UserCard({
   user,
   canEdit,
+  canDelete,
   onRoleChange,
+  onDelete,
 }: {
   user: AppUser;
   canEdit: boolean;
+  canDelete: boolean;
   onRoleChange: (userId: string, newRole: UserRole) => Promise<void>;
+  onDelete: (userId: string, name: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  async function handleDeleteClick() {
+    setDeleting(true); setFeedback(null);
+    try { await onDelete(user.id, user.name); }
+    catch (err: unknown) {
+      setFeedback({ ok: false, msg: err instanceof Error ? err.message : 'Erro ao excluir.' });
+      setDeleting(false);
+    }
+  }
 
   async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const newRole = e.target.value as UserRole;
@@ -136,6 +151,17 @@ function UserCard({
         </div>
       )}
 
+      {canDelete && (
+        <button
+          onClick={handleDeleteClick}
+          disabled={deleting}
+          style={{ fontSize: 12, fontWeight: 600, color: '#C0392B', background: '#FCEBE8',
+            border: '1px solid #f5c6c0', borderRadius: 'var(--radius-sm)', padding: '4px 10px',
+            cursor: deleting ? 'default' : 'pointer' }}>
+          {deleting ? 'Excluindo…' : 'Excluir'}
+        </button>
+      )}
+
       {/* Feedback */}
       {feedback && (
         <span style={{ fontSize: 12, fontWeight: 600,
@@ -186,6 +212,22 @@ export default function EquipePage() {
     const { error: err } = await supabase.from('users').update({ role: newRole }).eq('id', userId);
     if (err) throw err;
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDelete = useCallback(async (userId: string, name: string) => {
+    if (!confirm(`Excluir o usuário "${name}"? Esta ação é irreversível. O histórico de atendimentos é preservado.`)) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch(`${getApiBase()}/api/users/${userId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(body.message ?? 'Erro ao excluir');
+    }
+    setUsers(prev => prev.filter(u => u.id !== userId));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -247,6 +289,8 @@ export default function EquipePage() {
               user={u}
               canEdit={canEdit}
               onRoleChange={handleRoleChange}
+              canDelete={canEdit && u.id !== currentUser?.id}
+              onDelete={handleDelete}
             />
           ))}
         </div>
