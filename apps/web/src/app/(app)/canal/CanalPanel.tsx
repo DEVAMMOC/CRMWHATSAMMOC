@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBase } from '@/lib/api-base';
+import { linkify, downloadHref } from '@/lib/linkify';
 import type { CanalMessage, CanalConversationStatus } from '@crmwhats/types';
 
 const API = getApiBase();
@@ -265,10 +266,13 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
               {m.message_type !== 'text' && !m.media_url && (
                 <div style={{ fontSize: 12, color: 'var(--ammoc-ink-400)', fontStyle: 'italic', marginBottom: 4 }}>⏳ baixando mídia…</div>
               )}
+              {m.media_url && (
+                <a href={downloadHref(m.media_url)} download style={{ display: 'inline-block', marginBottom: 4, color: 'var(--ammoc-green-700)', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>⬇ Baixar</a>
+              )}
               {/* Legenda abaixo da mídia (imagem/vídeo/áudio). Documento já mostra o
                   nome no próprio link 📎 — excluído aqui p/ não duplicar. */}
               {(m.message_type === 'text' || (m.content && m.media_url && m.message_type !== 'document')) && (
-                <div style={{ fontSize: 13, color: 'var(--ammoc-ink-900)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.content}</div>
+                <div style={{ fontSize: 13, color: 'var(--ammoc-ink-900)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(m.content)}</div>
               )}
               <div style={{ fontSize: 10, color: 'var(--ammoc-ink-400)', textAlign: 'right', marginTop: 2 }}>{fmtTime(m.sent_at)}</div>
             </div>
