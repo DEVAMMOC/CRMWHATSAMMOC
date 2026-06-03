@@ -158,6 +158,23 @@ export class EvolutionService {
     if (!res.ok) throw new Error(`Evolution sendMedia failed: ${res.status} ${await res.text()}`);
   }
 
+  /**
+   * Baixa (e decripta) uma mídia recebida. `mediaMessage` é o objeto `Message`
+   * exatamente como veio no webhook (contém imageMessage/audioMessage/etc com
+   * url/mediaKey/directPath). Evolution Go responde com data.base64 = data-url.
+   * Retorna o data-url (`data:<mime>;base64,...`) ou null em falha.
+   */
+  async downloadMedia(token: string, mediaMessage: unknown): Promise<string | null> {
+    const res = await fetch(`${this.baseUrl}/message/downloadimage`, {
+      method: 'POST',
+      headers: this.instanceHeaders(token),
+      body: JSON.stringify({ message: mediaMessage }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as { data?: { base64?: string } };
+    return body.data?.base64 ?? null;
+  }
+
   async deleteInstance(instanceId: string): Promise<void> {
     const res = await fetch(`${this.baseUrl}/instance/delete/${instanceId}`, {
       method: 'DELETE',

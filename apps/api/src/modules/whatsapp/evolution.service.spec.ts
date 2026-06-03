@@ -81,4 +81,21 @@ describe('EvolutionService', () => {
     } as unknown as Response);
     await expect(service.createOrFindInstance('n', 't')).rejects.toThrow('Evolution create failed');
   });
+
+  it('downloadMedia posts the Message to /message/downloadimage and returns data.base64', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ message: 'success', data: { base64: 'data:image/jpeg;base64,aGk=' } }),
+    } as unknown as Response);
+    const out = await service.downloadMedia('tok-1', { imageMessage: { url: 'x' } });
+    expect(out).toBe('data:image/jpeg;base64,aGk=');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://evo:8085/message/downloadimage',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ apikey: 'tok-1' }),
+        body: JSON.stringify({ message: { imageMessage: { url: 'x' } } }),
+      }),
+    );
+  });
 });
