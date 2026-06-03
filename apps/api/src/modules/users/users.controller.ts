@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import type { User } from '@supabase/supabase-js';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -26,5 +34,11 @@ export class UsersController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(authUser.id, dto);
+  }
+
+  @Delete(':id')
+  async remove(@CurrentUser() user: User, @Param('id') id: string) {
+    await this.usersService.deleteUser(user.id, id);
+    return { ok: true };
   }
 }

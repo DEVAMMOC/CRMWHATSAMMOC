@@ -138,13 +138,14 @@ export class CanalConversationService {
   ): Promise<void> {
     const { data: conv } = await this.supabase
       .from('canal_conversations')
-      .select('id, wa_contact_number, last_in_at, canal_numbers(phone_number_id)')
+      .select('id, wa_contact_number, last_in_at, assigned_to, canal_numbers(phone_number_id)')
       .eq('id', conversationId)
       .single();
     if (!conv) throw new NotFoundException('Conversa não encontrada');
     const cc = conv as unknown as {
       wa_contact_number: string;
       last_in_at: string | null;
+      assigned_to: string | null;
       canal_numbers: { phone_number_id: string };
     };
 
@@ -173,9 +174,11 @@ export class CanalConversationService {
       sent_by: userId,
       sent_at: now,
     });
+    const patch: Record<string, unknown> = { last_message_at: now, status: 'human' };
+    if (!cc.assigned_to) patch.assigned_to = userId;
     await this.supabase
       .from('canal_conversations')
-      .update({ last_message_at: now, status: 'human' })
+      .update(patch)
       .eq('id', conversationId);
   }
 
@@ -190,13 +193,14 @@ export class CanalConversationService {
   ): Promise<void> {
     const { data: conv } = await this.supabase
       .from('canal_conversations')
-      .select('wa_contact_number, last_in_at, canal_numbers(phone_number_id)')
+      .select('wa_contact_number, last_in_at, assigned_to, canal_numbers(phone_number_id)')
       .eq('id', conversationId)
       .single();
     if (!conv) throw new NotFoundException('Conversa não encontrada');
     const cc = conv as unknown as {
       wa_contact_number: string;
       last_in_at: string | null;
+      assigned_to: string | null;
       canal_numbers: { phone_number_id: string };
     };
     if (!cc.last_in_at || Date.now() - new Date(cc.last_in_at).getTime() > 24 * 60 * 60 * 1000) {
@@ -217,9 +221,11 @@ export class CanalConversationService {
       sent_by: userId,
       sent_at: now,
     });
+    const patch: Record<string, unknown> = { last_message_at: now, status: 'human' };
+    if (!cc.assigned_to) patch.assigned_to = userId;
     await this.supabase
       .from('canal_conversations')
-      .update({ last_message_at: now, status: 'human' })
+      .update(patch)
       .eq('id', conversationId);
   }
 

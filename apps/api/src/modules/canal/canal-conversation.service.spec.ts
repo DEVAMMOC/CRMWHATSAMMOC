@@ -59,3 +59,47 @@ describe('CanalConversationService.ingestInbound', () => {
     );
   });
 });
+
+describe('CanalConversationService.reply auto-assign', () => {
+  it('atribui ao remetente quando assigned_to é nulo', async () => {
+    const updateArg: Record<string, unknown> = {};
+    const supa = {
+      from: jest.fn((table: string) => {
+        if (table === 'canal_conversations') return {
+          select: () => ({ eq: () => ({ single: async () => ({ data: {
+            id: 'c1', wa_contact_number: '5549999', last_in_at: new Date().toISOString(),
+            assigned_to: null, canal_numbers: { phone_number_id: 'PN' },
+          } }) }) }),
+          update: (arg: Record<string, unknown>) => { Object.assign(updateArg, arg); return { eq: async () => ({}) }; },
+        };
+        if (table === 'canal_messages') return { insert: async () => ({ error: null }) };
+        return {};
+      }),
+    } as unknown as SupabaseClient;
+    const meta = { sendText: jest.fn().mockResolvedValue({ ok: true, wa_message_id: 'x' }) } as unknown as MetaService;
+    const svc = new CanalConversationService(supa, meta);
+    await svc.reply('c1', 'user-1', 'oi');
+    expect(updateArg.assigned_to).toBe('user-1');
+  });
+
+  it('NÃO rouba atribuição existente', async () => {
+    const updateArg: Record<string, unknown> = {};
+    const supa = {
+      from: jest.fn((table: string) => {
+        if (table === 'canal_conversations') return {
+          select: () => ({ eq: () => ({ single: async () => ({ data: {
+            id: 'c1', wa_contact_number: '5549999', last_in_at: new Date().toISOString(),
+            assigned_to: 'outro', canal_numbers: { phone_number_id: 'PN' },
+          } }) }) }),
+          update: (arg: Record<string, unknown>) => { Object.assign(updateArg, arg); return { eq: async () => ({}) }; },
+        };
+        if (table === 'canal_messages') return { insert: async () => ({ error: null }) };
+        return {};
+      }),
+    } as unknown as SupabaseClient;
+    const meta = { sendText: jest.fn().mockResolvedValue({ ok: true, wa_message_id: 'x' }) } as unknown as MetaService;
+    const svc = new CanalConversationService(supa, meta);
+    await svc.reply('c1', 'user-1', 'oi');
+    expect(updateArg.assigned_to).toBeUndefined();
+  });
+});
