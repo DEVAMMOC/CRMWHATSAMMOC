@@ -20,6 +20,7 @@ const FUNCIONARIO_NAV: NavItem[] = [
   { icon: '💬', label: 'Conversas', href: '/dashboard' },
   { icon: '📋', label: 'Atendimentos', href: '/atendimentos' },
   { icon: '📥', label: 'Recebidos', href: '/recebidos' },
+  { icon: '🗂️', label: 'Kanban', href: '/kanban' },
 ];
 
 const WHATSAPP_NAV: NavItem[] = [

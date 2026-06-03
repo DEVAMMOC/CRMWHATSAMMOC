@@ -163,4 +163,29 @@ export class CanalConversationService {
       .update({ status: 'closed' })
       .eq('id', conversationId);
   }
+
+  /** Altera o status de uma conversa (usado pelo Kanban de atendimento). */
+  async setStatus(
+    conversationId: string,
+    status: string,
+    userId: string,
+  ): Promise<void> {
+    if (!['open', 'human', 'closed'].includes(status)) {
+      throw new BadRequestException(`Status inválido: ${status}`);
+    }
+    const patch: Record<string, unknown> =
+      status === 'closed'
+        ? {
+            status,
+            closed_at: new Date().toISOString(),
+            closed_by: userId,
+            close_reason: 'manual',
+          }
+        : { status, closed_at: null, closed_by: null, close_reason: null };
+    const { error } = await this.supabase
+      .from('canal_conversations')
+      .update(patch)
+      .eq('id', conversationId);
+    if (error) throw new BadRequestException(error.message);
+  }
 }

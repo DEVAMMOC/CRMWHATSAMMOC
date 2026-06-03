@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { CanalConversationService } from './canal-conversation.service';
 import { CanalSendMessageDto } from './dto/send-message.dto';
 import { CanalDelegateDto } from './dto/delegate.dto';
+import { CanalStatusDto } from './dto/status.dto';
 
 @Controller('canal/conversations')
 @UseGuards(AuthGuard)
@@ -38,5 +39,14 @@ export class CanalInboxController {
   @Post(':id/close')
   close(@Param('id') id: string) {
     return this.convs.close(id);
+  }
+
+  @Post(':id/status')
+  setStatus(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: CanalStatusDto,
+  ) {
+    return this.convs.setStatus(id, dto.status, user.id);
   }
 }
