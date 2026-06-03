@@ -283,14 +283,20 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
               ✋ Assumir
             </button>
           )}
-          <button type="button" onClick={() => setShowDelegate(true)}
-            style={{ background: 'var(--ammoc-paper-2)', border: '1.5px solid var(--ammoc-line)', color: 'var(--ammoc-ink-700)', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            🏛️ Delegar
-          </button>
-          <button type="button" onClick={() => void handleClose()} disabled={closing}
-            style={{ background: 'none', border: '1px solid #fca5a5', color: '#b91c1c', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: closing ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-            {closing ? '…' : 'Encerrar'}
-          </button>
+          {/* Delegar/Encerrar só fazem sentido enquanto a conversa está ativa.
+              Numa conversa Encerrada ficam ocultos até reabrir com nova mensagem. */}
+          {status !== 'closed' && (
+            <>
+              <button type="button" onClick={() => setShowDelegate(true)}
+                style={{ background: 'var(--ammoc-paper-2)', border: '1.5px solid var(--ammoc-line)', color: 'var(--ammoc-ink-700)', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                🏛️ Delegar
+              </button>
+              <button type="button" onClick={() => void handleClose()} disabled={closing}
+                style={{ background: 'none', border: '1px solid #fca5a5', color: '#b91c1c', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: closing ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                {closing ? '…' : 'Encerrar'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
