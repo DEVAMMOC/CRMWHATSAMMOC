@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
+import NotificationBell from './NotificationBell';
 import type { AppUser } from '@crmwhats/types';
 import styles from './AppShell.module.css';
 
@@ -20,6 +21,7 @@ export default function AppShellClient({ user, children }: { user: AppUser; chil
         <button type="button" className={styles.hamburger} aria-label="Abrir menu" onClick={() => setDrawerOpen(true)}>☰</button>
         <span className={styles.topbarBrand}>AMMOC <span className={styles.topbarSub}>CRMWhats</span></span>
       </header>
+      <NotificationBell />
       {drawerOpen && <div className={styles.overlay} onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
       <div className={`${styles.sidebarWrap} ${drawerOpen ? styles.sidebarWrapOpen : ''}`}>
         <Sidebar user={user} onNavigate={() => setDrawerOpen(false)} />

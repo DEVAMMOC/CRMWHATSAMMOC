@@ -3,7 +3,6 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { AppUser } from '@crmwhats/types';
@@ -26,7 +25,6 @@ const FUNCIONARIO_NAV: NavItem[] = [
 
 const WHATSAPP_NAV: NavItem[] = [
   { icon: '📱', label: 'Meu número', href: '/meu-numero', dot: true },
-  { icon: '🔔', label: 'Notificações', href: '/notificacoes' },
 ];
 
 const ORG_NAV: NavItem[] = [
@@ -74,21 +72,6 @@ interface SidebarProps {
 export default function Sidebar({ user, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [unread, setUnread] = useState(0);
-
-  // Contagem de notificações não-lidas do usuário (RLS escopa pra ele). Recarrega ao trocar de rota.
-  useEffect(() => {
-    const supabase = createClient();
-    let active = true;
-    void (async () => {
-      const { count } = await supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('read', false);
-      if (active) setUnread(count ?? 0);
-    })();
-    return () => { active = false; };
-  }, [pathname]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -119,7 +102,7 @@ export default function Sidebar({ user, onNavigate }: SidebarProps) {
         {FUNCIONARIO_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         <div className={styles.navSection}>WhatsApp</div>
-        {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item.href === '/notificacoes' ? { ...item, badge: unread > 0 ? unread : undefined, dot: false } : item} pathname={pathname} onNavigate={onNavigate} />)}
+        {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         <div className={styles.navSection}>Organização</div>
         {ORG_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
