@@ -243,14 +243,23 @@ export class WebhookService {
 
   private async handleConnectionUpdate(token: string, data: Record<string, unknown>): Promise<void> {
     const state = (data['state'] ?? data['connection'] ?? '') as string;
-    const statusMap: Record<string, string> = {
-      open: 'connected',
-      connecting: 'connecting',
-      close: 'disconnected',
-      closed: 'disconnected',
-      conflict: 'disconnected',
-    };
-    const whatsappStatus = statusMap[state] ?? 'disconnected';
+
+    // `state: 'open'` do whatsmeow significa apenas que o WEBSOCKET abriu — não que
+    // o dispositivo está pareado. Confiar nele marcaria "connected" antes do QR ser
+    // escaneado. Para estados de conexão, confirmamos o status real via getStatus
+    // (que checa LoggedIn); estados de fechamento mapeiam direto para disconnected.
+    let whatsappStatus: string;
+    if (state === 'close' || state === 'closed' || state === 'conflict') {
+      whatsappStatus = 'disconnected';
+    } else if (state === 'open' || state === 'connecting') {
+      try {
+        whatsappStatus = (await this.evolution.getStatus(token)).status;
+      } catch {
+        whatsappStatus = 'connecting';
+      }
+    } else {
+      whatsappStatus = 'disconnected';
+    }
 
     const { data: userRow } = await this.supabase
       .from('users')
