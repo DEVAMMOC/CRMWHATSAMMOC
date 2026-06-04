@@ -1,52 +1,58 @@
 import { ContextService } from './context.service';
 import { SupabaseClient } from '@supabase/supabase-js';
 
-const makeSupabase = (conv: object, messages: object[]) => {
-  const singleConv = jest.fn().mockResolvedValue({ data: conv, error: null });
-  const msgOrder   = jest.fn().mockResolvedValue({ data: messages, error: null });
-  const upsert     = jest.fn().mockResolvedValue({ error: null });
-
-  const supabase = {
-    from: jest.fn().mockImplementation((table: string) => {
-      if (table === 'conversations') {
-        return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ single: singleConv }) }) };
-      }
-      if (table === 'messages') {
-        return { select: jest.fn().mockReturnValue({ eq: jest.fn().mockReturnValue({ order: msgOrder }) }) };
-      }
-      if (table === 'context_files') {
-        return { upsert };
-      }
-      return {};
-    }),
-    _upsert: upsert,
-  };
-  return supabase as unknown as SupabaseClient & { _upsert: jest.Mock };
-};
-
-describe('ContextService', () => {
-  it('generateMd creates markdown with header and messages', async () => {
+describe('ContextService.generateMd (export unificado)', () => {
+  it('gera md+json pending em /conversas com contexto/resolução', async () => {
     const conv = {
-      id: 'conv-1',
+      id: 'aaaaaaaa-0000-0000-0000-000000000000',
       contact_name: 'João',
       contact_number: '5547999',
+      status: 'encerrada',
+      municipality: 'Luzerna',
+      subject: 'Iluminação pública',
       created_at: '2026-01-01T10:00:00Z',
       shared_at: '2026-01-01T11:00:00Z',
-      owner_user_id: { name: 'Maria' },
+      last_message_at: '2026-01-01T12:00:00Z',
+      owner: { name: 'Maria', role: 'funcionario' },
+      assigned: null,
+      sectors: { name: 'Obras' },
     };
     const messages = [
-      { direction: 'in', content: 'Olá!', sent_at: '2026-01-01T10:01:00Z' },
-      { direction: 'out', content: 'Oi, como posso ajudar?', sent_at: '2026-01-01T10:02:00Z' },
+      { direction: 'in', content: 'Poste queimado na rua X', sent_at: '2026-01-01T10:01:00Z' },
+      { direction: 'out', content: 'Equipe a caminho', sent_at: '2026-01-01T10:02:00Z' },
     ];
-    const supa = makeSupabase(conv, messages);
-    const service = new ContextService(supa as unknown as SupabaseClient);
-    await service.generateMd('conv-1');
+    let inserted: Array<Record<string, unknown>> = [];
+    const supa = {
+      from: jest.fn((table: string) => {
+        if (table === 'conversations')
+          return { select: () => ({ eq: () => ({ single: async () => ({ data: conv, error: null }) }) }) };
+        if (table === 'messages')
+          return { select: () => ({ eq: () => ({ order: async () => ({ data: messages, error: null }) }) }) };
+        if (table === 'context_files')
+          return {
+            delete: () => ({ eq: async () => ({}) }),
+            insert: async (rows: Array<Record<string, unknown>>) => {
+              inserted = rows;
+              return { error: null };
+            },
+          };
+        return {};
+      }),
+    } as unknown as SupabaseClient;
 
-    const upsertCall = (supa as unknown as { _upsert: jest.Mock })._upsert.mock.calls[0][0];
-    expect(upsertCall.file_type).toBe('md');
-    expect(upsertCall.content).toContain('João');
-    expect(upsertCall.content).toContain('Olá!');
-    expect(upsertCall.content).toContain('Oi, como posso ajudar?');
-    expect(upsertCall.message_count).toBe(2);
+    await new ContextService(supa).generateMd('aaaaaaaa-0000-0000-0000-000000000000');
+
+    expect(inserted).toHaveLength(2);
+    const md = inserted.find((r) => r.file_type === 'md') as Record<string, string>;
+    const json = inserted.find((r) => r.file_type === 'json') as Record<string, string>;
+    expect(md.status).toBe('pending');
+    expect(md.github_path).toContain('conversas/luzerna/2026/');
+    expect(md.content).toContain('João');
+    expect(md.content).toContain('## Resolução');
+    const parsed = JSON.parse(json.content) as Record<string, unknown>;
+    expect(parsed.canal).toBe('numero-pessoal');
+    expect(parsed.municipio).toBe('Luzerna');
+    expect(parsed.assunto).toBe('Iluminação pública');
+    expect((parsed.participantes as Array<{ nome: string }>)[0].nome).toBe('Maria');
   });
 });

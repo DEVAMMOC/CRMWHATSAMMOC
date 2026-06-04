@@ -9,6 +9,7 @@ import { WhatsAppController } from './whatsapp.controller';
 import { WebhookService } from './webhook.service';
 import { WebhookController } from './webhook.controller';
 import { ContextService } from './context.service';
+import { GithubSyncService } from '../canal/github-sync.service';
 import { ConversationShareController } from './conversation-share.controller';
 
 @Module({
@@ -37,6 +38,12 @@ import { ConversationShareController } from './conversation-share.controller';
       inject: ['SUPABASE_CLIENT'],
       useFactory: (supabase: ReturnType<typeof createClient>) =>
         new ContextService(supabase),
+    },
+    {
+      provide: GithubSyncService,
+      inject: ['SUPABASE_CLIENT'],
+      useFactory: (supabase: ReturnType<typeof createClient>) =>
+        new GithubSyncService(supabase),
     },
     {
       provide: WhatsAppService,

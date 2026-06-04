@@ -1,4 +1,5 @@
-import { CanalExportService, slugify } from './canal-export.service';
+import { CanalExportService } from './canal-export.service';
+import { slugify } from '../../common/conversation-export';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 describe('slugify', () => {
