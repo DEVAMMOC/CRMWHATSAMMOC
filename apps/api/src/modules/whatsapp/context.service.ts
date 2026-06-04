@@ -1,6 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { buildExportFiles, ExportParticipante } from '../../common/conversation-export';
 
+const STATUS_MAP: Record<string, string> = {
+  nao_salva: 'aberta',
+  pendente: 'aberta',
+  ativa: 'em_atendimento',
+  encerrada: 'encerrada',
+};
+
+/**
+ * Gera o export unificado (.md + .json) de uma conversa do **número pessoal**
+ * compartilhada, no MESMO formato e pasta `/conversas/{municipio}/{ano}/` usado
+ * pelo Canal, e grava em `context_files` como `pending` (o GithubSyncService publica).
+ */
 @Injectable()
 export class ContextService {
   private readonly logger = new Logger(ContextService.name);
@@ -8,73 +21,102 @@ export class ContextService {
   constructor(private readonly supabase: SupabaseClient) {}
 
   async generateMd(conversationId: string): Promise<void> {
-    // Fetch conversation (join owner name via foreign key embed)
     const { data: conv, error: convError } = await this.supabase
       .from('conversations')
-      .select('*, owner_user_id(name)')
+      .select('*, owner:owner_user_id(name, role), assigned:assigned_to(name, role), sectors(name)')
       .eq('id', conversationId)
       .single();
 
     if (convError || !conv) {
-      this.logger.error(`generateMd: conversation ${conversationId} not found`);
+      this.logger.error(`generateMd: conversa ${conversationId} não encontrada`);
       return;
     }
+    const c = conv as Record<string, unknown> & {
+      id: string;
+      contact_name: string | null;
+      contact_number: string;
+      status: string;
+      municipality: string | null;
+      subject: string | null;
+      created_at: string;
+      shared_at: string | null;
+      last_message_at: string | null;
+      owner: { name: string; role: string } | null;
+      assigned: { name: string; role: string } | null;
+      sectors: { name: string } | null;
+    };
 
-    // Fetch messages ordered by sent_at ascending
-    const { data: messages, error: msgsError } = await this.supabase
+    const { data: msgs } = await this.supabase
       .from('messages')
-      .select('direction, content, sent_at, message_type')
+      .select('direction, content, sent_at')
       .eq('conversation_id', conversationId)
       .order('sent_at', { ascending: true });
+    const messages = (msgs ?? []) as Array<{ direction: string; content: string | null; sent_at: string }>;
 
-    if (msgsError) {
-      this.logger.warn(`generateMd: could not fetch messages for ${conversationId}: ${msgsError.message}`);
-    }
+    const sectorName = c.sectors?.name ?? null;
+    const dataIso = c.last_message_at || c.shared_at || c.created_at;
+    const dataDay = new Date(dataIso).toISOString().slice(0, 10);
+    const status = STATUS_MAP[c.status] ?? c.status;
 
-    const ownerName: string =
-      (conv.owner_user_id as unknown as { name: string } | null)?.name ?? 'N/A';
-    const sharedAt = conv.shared_at
-      ? new Date(conv.shared_at as string).toLocaleString('pt-BR')
-      : '—';
-    const startedAt = new Date(conv.created_at as string).toLocaleString('pt-BR');
+    const inbound = messages
+      .filter((m) => m.direction === 'in' && m.content)
+      .slice(0, 3)
+      .map((m) => m.content as string);
+    const contexto = inbound.join(' ').slice(0, 1000) || 'Sem conteúdo textual inicial.';
+    const lastOut =
+      [...messages].reverse().find((m) => m.direction === 'out' && m.content)?.content ?? '';
+    const resolucao =
+      c.status === 'encerrada'
+        ? `Atendimento encerrado.${lastOut ? ` Última resposta: ${lastOut}` : ''}`
+        : `Status atual: ${status}.${lastOut ? ` Última resposta: ${lastOut}` : ''}`;
 
-    const lines: string[] = [
-      `# Conversa: ${conv.contact_name || conv.contact_number}`,
-      '',
-      `**Contato:** ${conv.contact_number}`,
-      `**Atendente:** ${ownerName}`,
-      `**Início:** ${startedAt}`,
-      `**Compartilhado em:** ${sharedAt}`,
-      '',
-      '---',
-      '',
-      '## Mensagens',
-      '',
-    ];
+    const participantes: ExportParticipante[] = [];
+    if (c.owner?.name)
+      participantes.push({ nome: c.owner.name, papel: c.owner.role ?? 'funcionario', setor: sectorName });
+    if (c.assigned?.name && c.assigned.name !== c.owner?.name)
+      participantes.push({ nome: c.assigned.name, papel: c.assigned.role ?? 'funcionario', setor: sectorName });
 
-    for (const msg of messages ?? []) {
-      const dir = (msg.direction as string) === 'in' ? '📨 Contato' : '📤 Sistema';
-      const ts  = new Date(msg.sent_at as string).toLocaleString('pt-BR');
-      lines.push(`**${ts} [${dir}]:** ${msg.content || '[mídia]'}`);
-      lines.push('');
-    }
+    const { basePath, md, json } = buildExportFiles({
+      id: c.id,
+      canal: 'numero-pessoal',
+      contatoNome: c.contact_name,
+      contatoNumero: c.contact_number,
+      municipio: c.municipality ?? null,
+      assunto: c.subject ?? null,
+      setor: sectorName,
+      statusLabel: status,
+      dataDay,
+      participantes,
+      contexto,
+      resolucao,
+      eventos: [],
+      mensagensTotal: messages.length,
+    });
 
-    const content = lines.join('\n');
-
-    const { error } = await this.supabase.from('context_files').upsert(
+    await this.supabase.from('context_files').delete().eq('conversation_id', c.id);
+    const now = new Date().toISOString();
+    const { error } = await this.supabase.from('context_files').insert([
       {
-        conversation_id: conversationId,
+        conversation_id: c.id,
         file_type: 'md',
-        content,
-        message_count: (messages ?? []).length,
-        github_path: `conversations/${conversationId}.md`,
+        content: md,
+        message_count: messages.length,
+        github_path: `${basePath}.md`,
         status: 'pending',
-        generated_at: new Date().toISOString(),
+        generated_at: now,
       },
-      { onConflict: 'conversation_id,file_type' },
-    );
+      {
+        conversation_id: c.id,
+        file_type: 'json',
+        content: JSON.stringify(json, null, 2),
+        message_count: messages.length,
+        github_path: `${basePath}.json`,
+        status: 'pending',
+        generated_at: now,
+      },
+    ]);
 
-    if (error) this.logger.error(`generateMd upsert failed: ${error.message}`);
-    else this.logger.log(`MD generated for conversation ${conversationId}`);
+    if (error) this.logger.error(`generateMd insert falhou: ${error.message}`);
+    else this.logger.log(`export pessoal gerado p/ ${c.id} → ${basePath}`);
   }
 }

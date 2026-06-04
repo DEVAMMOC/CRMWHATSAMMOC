@@ -1,24 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { buildExportFiles, ExportParticipante } from '../../common/conversation-export';
 
 const STATUS_MAP: Record<string, string> = {
   open: 'aberta',
   human: 'em_atendimento',
   closed: 'encerrada',
 };
-
-/** Slug seguro p/ caminho: sem acento, minúsculo, não-alfanumérico → hífen. */
-export function slugify(s: string | null | undefined): string {
-  return (
-    (s || '')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'sem'
-  );
-}
 
 interface ConvRow {
   id: string;
@@ -91,9 +79,7 @@ export class CanalExportService {
     const sectorName = c.sectors?.name ?? null;
     const dataIso = c.closed_at || c.last_message_at || c.created_at;
     const dataDay = new Date(dataIso).toISOString().slice(0, 10);
-    const ano = dataDay.slice(0, 4);
     const status = STATUS_MAP[c.status] ?? c.status;
-    const contatoNome = c.wa_contact_name || c.wa_contact_number;
 
     const inbound = messages
       .filter((m) => m.direction === 'in' && !m.is_system && m.content)
@@ -113,61 +99,28 @@ export class CanalExportService {
           (lastOut ? ` Última resposta: ${lastOut}` : '')
         : `Status atual: ${status}.` + (lastOut ? ` Última resposta: ${lastOut}` : '');
 
-    const participantes = [...userMap.values()].map((u) => ({
+    const participantes: ExportParticipante[] = [...userMap.values()].map((u) => ({
       nome: u.name,
       papel: u.role,
       setor: sectorName,
     }));
 
-    const json = {
+    const { basePath: base, md, json } = buildExportFiles({
       id: c.id,
-      data: dataDay,
+      canal: 'canal-oficial',
+      contatoNome: c.wa_contact_name,
+      contatoNumero: c.wa_contact_number,
       municipio: c.municipality ?? null,
       assunto: c.subject ?? null,
       setor: sectorName,
-      status,
-      canal: 'canal-oficial',
-      contato: { nome: c.wa_contact_name ?? null, numero: c.wa_contact_number },
+      statusLabel: status,
+      dataDay,
       participantes,
       contexto,
       resolucao,
       eventos,
-      tags: [] as string[],
-      mensagens_total: messages.length,
-      exportado_em: new Date().toISOString(),
-    };
-
-    const md = [
-      '---',
-      `id: ${c.id}`,
-      `data: ${dataDay}`,
-      `municipio: ${c.municipality ?? ''}`,
-      `assunto: ${c.subject ?? ''}`,
-      `setor: ${sectorName ?? ''}`,
-      `status: ${status}`,
-      'canal: canal-oficial',
-      `contato: ${contatoNome} (${c.wa_contact_number})`,
-      `participantes: [${participantes.map((p) => p.nome).join(', ')}]`,
-      `mensagens_total: ${messages.length}`,
-      `exportado_em: ${json.exportado_em}`,
-      '---',
-      '',
-      `# Atendimento — ${c.subject ?? 'Sem assunto'}${c.municipality ? ` · ${c.municipality}` : ''}`,
-      '',
-      '## Contexto',
-      contexto,
-      '',
-      '## Andamento',
-      ...(eventos.length ? eventos.map((e) => `- ${e.descricao}`) : ['- (sem eventos registrados)']),
-      '',
-      '## Resolução',
-      resolucao,
-      '',
-    ].join('\n');
-
-    const base = `conversas/${slugify(c.municipality ?? 'sem-municipio')}/${ano}/${dataDay}_${slugify(
-      c.subject ?? 'sem-assunto',
-    )}_${c.id.slice(0, 8)}`;
+      mensagensTotal: messages.length,
+    });
 
     // Regenera: remove exportações anteriores desta conversa e insere as novas.
     await this.supabase.from('context_files').delete().eq('canal_conversation_id', c.id);

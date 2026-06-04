@@ -7,6 +7,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ContextService } from './context.service';
+import { GithubSyncService } from '../canal/github-sync.service';
 import { DelegateDto } from './dto/delegate.dto';
 
 @Controller('conversations')
@@ -17,6 +18,7 @@ export class ConversationShareController {
   constructor(
     @Inject('SUPABASE_CLIENT') private readonly supabase: SupabaseClient,
     private readonly context: ContextService,
+    private readonly githubSync: GithubSyncService,
   ) {}
 
   @Post(':id/share')
@@ -47,10 +49,13 @@ export class ConversationShareController {
       throw new InternalServerErrorException('Erro ao compartilhar conversa');
     }
 
-    // Generate .md async — non-blocking
-    this.context.generateMd(id).catch((err: unknown) => {
-      this.logger.error(`generateMd fire-and-forget failed for conversation ${id}`, err);
-    });
+    // Gera o export unificado (.md+.json) e publica no Segundo Cérebro — não-bloqueante.
+    this.context
+      .generateMd(id)
+      .then(() => this.githubSync.syncPending())
+      .catch((err: unknown) => {
+        this.logger.error(`export/sync fire-and-forget falhou p/ conversa ${id}`, err);
+      });
 
     return { message: 'Conversa compartilhada e visível no painel', status: 'ativa' };
   }
