@@ -52,6 +52,23 @@ export class ConversationShareController {
       throw new InternalServerErrorException('Erro ao compartilhar conversa');
     }
 
+    // Cria o atendimento (aberto) se ainda não houver um aberto — assim a conversa
+    // compartilhada aparece em "Atendimentos" (em andamento) do dono.
+    const { data: openAtt } = await this.supabase
+      .from('attendances')
+      .select('id')
+      .eq('conversation_id', id)
+      .neq('status', 'encerrado')
+      .maybeSingle();
+    if (!openAtt) {
+      await this.supabase.from('attendances').insert({
+        conversation_id: id,
+        assigned_to: user.id,
+        status: 'aberto',
+        opened_at: new Date().toISOString(),
+      });
+    }
+
     // Gera o export unificado (.md+.json) e publica no Segundo Cérebro — não-bloqueante.
     this.context
       .generateMd(id)

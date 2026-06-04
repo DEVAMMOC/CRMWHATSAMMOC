@@ -61,7 +61,7 @@ export default function RecebidosPage() {
     const { data: convData, error: convError } = await supabase
       .from('conversations')
       .select('*')
-      .in('status', ['pendente', 'ativa'])
+      .eq('status', 'pendente')
       .order('last_message_at', { ascending: false });
 
     if (convError) {
