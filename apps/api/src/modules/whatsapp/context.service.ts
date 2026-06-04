@@ -46,11 +46,14 @@ export class ContextService {
       sectors: { name: string } | null;
     };
 
-    const { data: msgs } = await this.supabase
+    // Exporta SÓ o trecho a partir do compartilhamento (evita histórico fora de
+    // contexto anterior ao "compartilhada"). Sem shared_at, exporta tudo.
+    let msgQuery = this.supabase
       .from('messages')
       .select('direction, content, sent_at')
-      .eq('conversation_id', conversationId)
-      .order('sent_at', { ascending: true });
+      .eq('conversation_id', conversationId);
+    if (c.shared_at) msgQuery = msgQuery.gte('sent_at', c.shared_at);
+    const { data: msgs } = await msgQuery.order('sent_at', { ascending: true });
     const messages = (msgs ?? []) as Array<{ direction: string; content: string | null; sent_at: string }>;
 
     const sectorName = c.sectors?.name ?? null;

@@ -27,7 +27,14 @@ describe('ContextService.generateMd (export unificado)', () => {
         if (table === 'conversations')
           return { select: () => ({ eq: () => ({ single: async () => ({ data: conv, error: null }) }) }) };
         if (table === 'messages')
-          return { select: () => ({ eq: () => ({ order: async () => ({ data: messages, error: null }) }) }) };
+          return {
+            select: () => ({
+              eq: () => ({
+                gte: () => ({ order: async () => ({ data: messages, error: null }) }),
+                order: async () => ({ data: messages, error: null }),
+              }),
+            }),
+          };
         if (table === 'context_files')
           return {
             delete: () => ({ eq: async () => ({}) }),
