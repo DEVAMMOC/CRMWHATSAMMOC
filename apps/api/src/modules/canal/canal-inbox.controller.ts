@@ -8,11 +8,25 @@ import { CanalDelegateDto } from './dto/delegate.dto';
 import { CanalStatusDto } from './dto/status.dto';
 import { CanalSendMediaDto } from './dto/send-media.dto';
 import { CanalSetMetaDto } from './dto/set-meta.dto';
+import { CanalExportService } from './canal-export.service';
+import { GithubSyncService } from './github-sync.service';
 
 @Controller('canal/conversations')
 @UseGuards(AuthGuard)
 export class CanalInboxController {
-  constructor(private readonly convs: CanalConversationService) {}
+  constructor(
+    private readonly convs: CanalConversationService,
+    private readonly exportSvc: CanalExportService,
+    private readonly githubSync: GithubSyncService,
+  ) {}
+
+  /** Exporta a conversa p/ o Segundo Cérebro e dá push (fire-and-forget). */
+  private exportToSecondBrain(id: string): void {
+    void this.exportSvc
+      .buildAndStore(id)
+      .then(() => this.githubSync.syncPending())
+      .catch(() => undefined);
+  }
 
   @Get()
   list() {
@@ -58,16 +72,20 @@ export class CanalInboxController {
   }
 
   @Post(':id/close')
-  close(@Param('id') id: string) {
-    return this.convs.close(id);
+  async close(@Param('id') id: string) {
+    await this.convs.close(id);
+    this.exportToSecondBrain(id);
+    return { ok: true };
   }
 
   @Post(':id/status')
-  setStatus(
+  async setStatus(
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body() dto: CanalStatusDto,
   ) {
-    return this.convs.setStatus(id, dto.status, user.id);
+    await this.convs.setStatus(id, dto.status, user.id);
+    if (dto.status === 'closed') this.exportToSecondBrain(id);
+    return { ok: true };
   }
 }

@@ -5,6 +5,8 @@ import { AuthModule } from '../auth/auth.module';
 import { MetaService } from './meta.service';
 import { CanalConfigService } from './canal-config.service';
 import { CanalConversationService } from './canal-conversation.service';
+import { CanalExportService } from './canal-export.service';
+import { GithubSyncService } from './github-sync.service';
 import { CanalSchedulerService } from './canal-scheduler.service';
 import { CanalWebhookController } from './canal-webhook.controller';
 import { CanalConfigController } from './canal-config.controller';
@@ -43,10 +45,25 @@ import { CanalInboxController } from './canal-inbox.controller';
       ) => new CanalConversationService(supabase, meta),
     },
     {
-      provide: CanalSchedulerService,
+      provide: CanalExportService,
       inject: ['SUPABASE_CLIENT'],
       useFactory: (supabase: ReturnType<typeof createClient>) =>
-        new CanalSchedulerService(supabase),
+        new CanalExportService(supabase),
+    },
+    {
+      provide: GithubSyncService,
+      inject: ['SUPABASE_CLIENT'],
+      useFactory: (supabase: ReturnType<typeof createClient>) =>
+        new GithubSyncService(supabase),
+    },
+    {
+      provide: CanalSchedulerService,
+      inject: ['SUPABASE_CLIENT', CanalExportService, GithubSyncService],
+      useFactory: (
+        supabase: ReturnType<typeof createClient>,
+        exportSvc: CanalExportService,
+        githubSync: GithubSyncService,
+      ) => new CanalSchedulerService(supabase, exportSvc, githubSync),
     },
   ],
   controllers: [
