@@ -10,6 +10,7 @@ import { CanalSendMediaDto } from './dto/send-media.dto';
 import { CanalSetMetaDto } from './dto/set-meta.dto';
 import { CanalExportService } from './canal-export.service';
 import { GithubSyncService } from './github-sync.service';
+import { CanalClassifyService } from './canal-classify.service';
 
 @Controller('canal/conversations')
 @UseGuards(AuthGuard)
@@ -18,6 +19,7 @@ export class CanalInboxController {
     private readonly convs: CanalConversationService,
     private readonly exportSvc: CanalExportService,
     private readonly githubSync: GithubSyncService,
+    private readonly classify: CanalClassifyService,
   ) {}
 
   /** Exporta a conversa p/ o Segundo Cérebro e dá push (fire-and-forget). */
@@ -69,6 +71,11 @@ export class CanalInboxController {
   @Post(':id/meta')
   setMeta(@Param('id') id: string, @Body() dto: CanalSetMetaDto) {
     return this.convs.setMeta(id, { subject: dto.subject, municipality: dto.municipality });
+  }
+
+  @Post(':id/classify')
+  classifyByAi(@Param('id') id: string) {
+    return this.classify.classifyOne(id, true);
   }
 
   @Post(':id/close')

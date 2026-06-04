@@ -168,6 +168,7 @@ export interface CanalConversation {
   wa_contact_number: string;
   wa_contact_name: string | null;
   sector_id: string | null;
+  suggested_sector_id: string | null;
   assigned_to: string | null;
   status: CanalConversationStatus;
   subject: string | null;

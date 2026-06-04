@@ -10,6 +10,7 @@ import { WebhookService } from './webhook.service';
 import { WebhookController } from './webhook.controller';
 import { ContextService } from './context.service';
 import { GithubSyncService } from '../canal/github-sync.service';
+import { AiService } from '../../common/ai.service';
 import { ConversationShareController } from './conversation-share.controller';
 
 @Module({
@@ -34,10 +35,16 @@ import { ConversationShareController } from './conversation-share.controller';
       ) => new WebhookService(supabase, evo),
     },
     {
-      provide: ContextService,
+      provide: AiService,
       inject: ['SUPABASE_CLIENT'],
       useFactory: (supabase: ReturnType<typeof createClient>) =>
-        new ContextService(supabase),
+        new AiService(supabase),
+    },
+    {
+      provide: ContextService,
+      inject: ['SUPABASE_CLIENT', AiService],
+      useFactory: (supabase: ReturnType<typeof createClient>, ai: AiService) =>
+        new ContextService(supabase, ai),
     },
     {
       provide: GithubSyncService,

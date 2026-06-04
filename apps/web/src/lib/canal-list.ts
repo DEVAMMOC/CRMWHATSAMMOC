@@ -8,6 +8,7 @@ export interface PanelCanalItem {
   number: string;
   status: string;
   sector_id: string | null;
+  suggested_sector_id: string | null;
   municipality: string | null;
   subject: string | null;
   assigned_to: string | null;
@@ -27,7 +28,7 @@ export async function fetchCanalItems(
   let q = supabase
     .from('canal_conversations')
     .select(
-      'id, wa_contact_name, wa_contact_number, status, sector_id, municipality, subject, assigned_to, last_message_at, canal_numbers(label)',
+      'id, wa_contact_name, wa_contact_number, status, sector_id, suggested_sector_id, municipality, subject, assigned_to, last_message_at, canal_numbers(label)',
     )
     .order('last_message_at', { ascending: false });
   if (opts.status) q = q.eq('status', opts.status);
@@ -40,6 +41,7 @@ export async function fetchCanalItems(
     number: r.wa_contact_number as string,
     status: r.status as string,
     sector_id: (r.sector_id as string | null) ?? null,
+    suggested_sector_id: (r.suggested_sector_id as string | null) ?? null,
     municipality: (r.municipality as string | null) ?? null,
     subject: (r.subject as string | null) ?? null,
     assigned_to: (r.assigned_to as string | null) ?? null,

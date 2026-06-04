@@ -46,6 +46,7 @@ interface AgentConfig {
   system_prompt: string;
   suggest_replies: boolean;
   auto_summarize: boolean;
+  classify_mode: string;
   updated_at?: string;
 }
 
@@ -184,6 +185,7 @@ const defaultAgent: AgentConfig = {
   system_prompt: '',
   suggest_replies: false,
   auto_summarize: false,
+  classify_mode: 'off',
 };
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -662,6 +664,9 @@ export default function ConfiguracoesPage() {
               <option value="gpt-4o-mini">gpt-4o-mini</option>
               <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
               <option value="claude-3-haiku">claude-3-haiku</option>
+              <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (mais barato)</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+              <option value="gemini-2.5-pro">gemini-2.5-pro</option>
               <option value="gemini-1.5-pro">gemini-1.5-pro</option>
             </select>
           </Field>
@@ -722,6 +727,19 @@ export default function ConfiguracoesPage() {
               label="Resumo automático ao encerrar"
             />
           </div>
+
+          <Field label="Classificação por IA">
+            <select
+              value={agent.classify_mode}
+              onChange={(e) => setAgent({ ...agent, classify_mode: e.target.value })}
+              style={inputStyle}
+            >
+              <option value="off">Desligada</option>
+              <option value="manual">Só no botão (manual)</option>
+              <option value="suggest">Sugerir setor automaticamente</option>
+              <option value="auto">Delegar ao setor automaticamente</option>
+            </select>
+          </Field>
 
           <button
             onClick={() =>

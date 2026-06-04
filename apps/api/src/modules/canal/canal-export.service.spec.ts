@@ -69,7 +69,8 @@ describe('CanalExportService.buildAndStore', () => {
       }),
     } as unknown as SupabaseClient;
 
-    await new CanalExportService(supa).buildAndStore('abcdef12-0000-0000-0000-000000000000');
+    const ai = { summarize: jest.fn().mockResolvedValue(null) } as never;
+    await new CanalExportService(supa, ai).buildAndStore('abcdef12-0000-0000-0000-000000000000');
 
     expect(inserted).toHaveLength(2);
     const md = inserted.find((r) => r.file_type === 'md') as Record<string, string>;

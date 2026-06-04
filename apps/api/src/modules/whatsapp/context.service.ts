@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { buildExportFiles, ExportParticipante } from '../../common/conversation-export';
+import { AiService } from '../../common/ai.service';
 
 const STATUS_MAP: Record<string, string> = {
   nao_salva: 'aberta',
@@ -18,7 +19,10 @@ const STATUS_MAP: Record<string, string> = {
 export class ContextService {
   private readonly logger = new Logger(ContextService.name);
 
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly ai: AiService,
+  ) {}
 
   async generateMd(conversationId: string): Promise<void> {
     const { data: conv, error: convError } = await this.supabase
@@ -65,13 +69,28 @@ export class ContextService {
       .filter((m) => m.direction === 'in' && m.content)
       .slice(0, 3)
       .map((m) => m.content as string);
-    const contexto = inbound.join(' ').slice(0, 1000) || 'Sem conteúdo textual inicial.';
     const lastOut =
       [...messages].reverse().find((m) => m.direction === 'out' && m.content)?.content ?? '';
-    const resolucao =
+
+    // Resumo determinístico (fallback) + IA quando ativa (auto_summarize).
+    let contexto = inbound.join(' ').slice(0, 1000) || 'Sem conteúdo textual inicial.';
+    let resolucao =
       c.status === 'encerrada'
         ? `Atendimento encerrado.${lastOut ? ` Última resposta: ${lastOut}` : ''}`
         : `Status atual: ${status}.${lastOut ? ` Última resposta: ${lastOut}` : ''}`;
+    try {
+      const transcript = messages
+        .filter((m) => m.content)
+        .map((m) => `${m.direction === 'in' ? 'Cidadão' : 'Atendente'}: ${m.content}`)
+        .join('\n');
+      const ai = await this.ai.summarize(transcript);
+      if (ai) {
+        if (ai.contexto) contexto = ai.contexto;
+        if (ai.resolucao) resolucao = ai.resolucao;
+      }
+    } catch (e) {
+      this.logger.warn(`auto-resumo IA falhou: ${e instanceof Error ? e.message : String(e)}`);
+    }
 
     const participantes: ExportParticipante[] = [];
     if (c.owner?.name)

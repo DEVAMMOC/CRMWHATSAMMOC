@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { buildExportFiles, ExportParticipante } from '../../common/conversation-export';
+import { AiService } from '../../common/ai.service';
 
 const STATUS_MAP: Record<string, string> = {
   open: 'aberta',
@@ -40,7 +41,10 @@ interface MsgRow {
 @Injectable()
 export class CanalExportService {
   private readonly logger = new Logger(CanalExportService.name);
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly ai: AiService,
+  ) {}
 
   async buildAndStore(canalConversationId: string): Promise<void> {
     const { data: convData } = await this.supabase
@@ -85,7 +89,6 @@ export class CanalExportService {
       .filter((m) => m.direction === 'in' && !m.is_system && m.content)
       .slice(0, 3)
       .map((m) => m.content as string);
-    const contexto = inbound.join(' ').slice(0, 1000) || 'Sem conteúdo textual inicial.';
 
     const eventos = messages
       .filter((m) => m.is_system && m.content)
@@ -93,11 +96,28 @@ export class CanalExportService {
 
     const lastOut =
       [...messages].reverse().find((m) => m.direction === 'out' && !m.is_system && m.content)?.content ?? '';
-    const resolucao =
+
+    // Resumo determinístico (fallback). Se o agente de IA estiver ativo + auto_summarize,
+    // substitui por um resumo melhor.
+    let contexto = inbound.join(' ').slice(0, 1000) || 'Sem conteúdo textual inicial.';
+    let resolucao =
       c.status === 'closed'
         ? `Atendimento encerrado${c.close_reason ? ` (${c.close_reason})` : ''}.` +
           (lastOut ? ` Última resposta: ${lastOut}` : '')
         : `Status atual: ${status}.` + (lastOut ? ` Última resposta: ${lastOut}` : '');
+    try {
+      const transcript = messages
+        .filter((m) => !m.is_system && m.content)
+        .map((m) => `${m.direction === 'in' ? 'Cidadão' : 'Atendente'}: ${m.content}`)
+        .join('\n');
+      const ai = await this.ai.summarize(transcript);
+      if (ai) {
+        if (ai.contexto) contexto = ai.contexto;
+        if (ai.resolucao) resolucao = ai.resolucao;
+      }
+    } catch (e) {
+      this.logger.warn(`auto-resumo IA falhou: ${e instanceof Error ? e.message : String(e)}`);
+    }
 
     const participantes: ExportParticipante[] = [...userMap.values()].map((u) => ({
       nome: u.name,
