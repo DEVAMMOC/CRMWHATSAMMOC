@@ -57,11 +57,11 @@ export default function RecebidosPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    // Load pending conversations (RLS will filter based on user role — supervisors/admins see all)
+    // Conversas pessoais compartilhadas/ativas (RLS filtra por papel — owner/lead/admin).
     const { data: convData, error: convError } = await supabase
       .from('conversations')
       .select('*')
-      .eq('status', 'pendente')
+      .in('status', ['pendente', 'ativa'])
       .order('last_message_at', { ascending: false });
 
     if (convError) {
@@ -93,10 +93,12 @@ export default function RecebidosPage() {
 
     setConversations(enriched);
 
-    // Also load Canal conversations delegated to me and still awaiting (status 'open').
+    // Conversas do Canal "Aguardando" (status 'open'). Sem filtro de assigned_to:
+    // a RLS já escopa — funcionário vê as atribuídas a ele; o CHEFE DE SETOR vê as
+    // do seu setor (delegadas ao setor, mesmo sem dono); admin/supervisor veem todas.
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const items = await fetchCanalItems(supabase, { status: 'open', assignedTo: user.id });
+      const items = await fetchCanalItems(supabase, { status: 'open' });
       setCanalItems(items);
     } else {
       setCanalItems([]);

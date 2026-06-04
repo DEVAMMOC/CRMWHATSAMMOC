@@ -174,18 +174,24 @@ export default function AtendimentosPage() {
     setClosingId(attendance.id);
     try {
       const now = new Date().toISOString();
-      const { error: attError } = await supabase
-        .from('attendances')
-        .update({ status: 'encerrado', closed_at: now })
-        .eq('id', attendance.id);
-      if (attError) throw attError;
-
       if (attendance.conversation_id) {
-        const { error: convError } = await supabase
-          .from('conversations')
-          .update({ status: 'encerrada' })
-          .eq('id', attendance.conversation_id);
-        if (convError) throw convError;
+        // Encerra via API: marca encerrada, fecha o atendimento e exporta SÓ o
+        // trecho compartilhada→encerrada p/ o Segundo Cérebro.
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${getApiBase()}/api/conversations/${attendance.conversation_id}/close`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+        });
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({ message: res.statusText }));
+          throw new Error(b.message ?? 'Erro ao encerrar');
+        }
+      } else {
+        const { error: attError } = await supabase
+          .from('attendances')
+          .update({ status: 'encerrado', closed_at: now })
+          .eq('id', attendance.id);
+        if (attError) throw attError;
       }
 
       setAttendances(prev =>
