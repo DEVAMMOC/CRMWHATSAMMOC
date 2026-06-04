@@ -17,9 +17,9 @@ interface NavItem {
 }
 
 const FUNCIONARIO_NAV: NavItem[] = [
-  { icon: '💬', label: 'Conversas', href: '/dashboard' },
-  { icon: '📋', label: 'Atendimentos', href: '/atendimentos' },
   { icon: '📥', label: 'Recebidos', href: '/recebidos' },
+  { icon: '📋', label: 'Atendimentos', href: '/atendimentos' },
+  { icon: '✅', label: 'Encerradas', href: '/dashboard' },
   { icon: '🗂️', label: 'Kanban', href: '/kanban' },
 ];
 

@@ -106,9 +106,11 @@ export default function AtendimentosPage() {
 
   const loadAttendances = useCallback(async () => {
     setLoading(true);
+    // Atendimentos = EM ANDAMENTO. Encerrados saem daqui (vão p/ "Encerradas").
     const { data, error } = await supabase
       .from('attendances')
       .select(`*, conversation:conversations(*), assigned_user:users!assigned_to(id, name, email)`)
+      .neq('status', 'encerrado')
       .order('opened_at', { ascending: false });
 
     if (error) {
@@ -125,7 +127,7 @@ export default function AtendimentosPage() {
       if (user) {
         setCurrentUserId(user.id);
         try {
-          const items = await fetchCanalItems(supabase, { status: 'human', assignedTo: user.id });
+          const items = await fetchCanalItems(supabase, { status: 'human' });
           setCanalItems(items);
         } catch (err) {
           console.error('Error loading canal items:', err);

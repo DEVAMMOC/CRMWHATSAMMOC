@@ -104,10 +104,11 @@ export default function DashboardPage() {
     setLoading(true);
     // O painel mostra apenas conversas compartilhadas/delegadas com a organização
     // (pendente/ativa/encerrada) — nunca a agenda privada do funcionário ('nao_salva').
+    // Aba "Encerradas": só conversas pessoais encerradas.
     const { data, error } = await supabase
       .from('conversations')
       .select('*')
-      .neq('status', 'nao_salva')
+      .eq('status', 'encerrada')
       .order('last_message_at', { ascending: false });
 
     if (error) {
@@ -116,10 +117,9 @@ export default function DashboardPage() {
       setConversations((data as Conversation[]) ?? []);
     }
 
-    // Conversas do Canal visíveis para mim (RLS já escopa a visibilidade) —
-    // histórico completo, sem filtro de status/responsável.
+    // E as conversas do Canal encerradas (RLS escopa a visibilidade).
     try {
-      const items = await fetchCanalItems(supabase);
+      const items = await fetchCanalItems(supabase, { status: 'closed' });
       setCanalItems(items);
     } catch (e) {
       console.error('Error loading canal conversations:', e);
@@ -291,10 +291,7 @@ export default function DashboardPage() {
   };
 
   const tabs: { key: StatusFilter; label: string }[] = [
-    { key: 'all',      label: 'Todas' },
-    { key: 'pendente', label: 'Pendentes' },
-    { key: 'ativa',    label: 'Ativas' },
-    { key: 'encerrada',label: 'Encerradas' },
+    { key: 'all', label: 'Encerradas' },
   ];
 
   return (
@@ -305,7 +302,7 @@ export default function DashboardPage() {
           fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,
           color: 'var(--ammoc-ink-900)', margin: 0, letterSpacing: '-0.02em',
         }}>
-          Conversas
+          Encerradas
         </h1>
         <span style={{
           background: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-600)',
