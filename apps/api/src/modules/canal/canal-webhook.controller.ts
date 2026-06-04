@@ -2,6 +2,7 @@ import { Controller, Get, Post, Query, Req, Res, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { MetaService } from './meta.service';
 import { CanalConversationService } from './canal-conversation.service';
+import { CanalClassifyService } from './canal-classify.service';
 
 @Controller('canal/webhook')
 export class CanalWebhookController {
@@ -9,6 +10,7 @@ export class CanalWebhookController {
   constructor(
     private readonly meta: MetaService,
     private readonly convs: CanalConversationService,
+    private readonly classify: CanalClassifyService,
   ) {}
 
   @Get()
@@ -71,16 +73,18 @@ export class CanalWebhookController {
               waMessageId: m.id, content: m.type === 'text' ? (m.text?.body ?? '') : '[mídia]',
               tsISO,
             });
-            continue;
+          } else {
+            const media = (m as Record<string, { id?: string; caption?: string; filename?: string }>)[m.type];
+            const caption = media?.caption ?? '';
+            const fileName = media?.filename ?? null;
+            await this.convs.ingestInbound({
+              phoneNumberId, from: m.from, name,
+              waMessageId: m.id, content: caption || fileName || '',
+              tsISO, messageType, mediaId: media?.id ?? null, fileName,
+            });
           }
-          const media = (m as Record<string, { id?: string; caption?: string; filename?: string }>)[m.type];
-          const caption = media?.caption ?? '';
-          const fileName = media?.filename ?? null;
-          await this.convs.ingestInbound({
-            phoneNumberId, from: m.from, name,
-            waMessageId: m.id, content: caption || fileName || '',
-            tsISO, messageType, mediaId: media?.id ?? null, fileName,
-          });
+          // Classificação por IA (modos suggest/auto; só se ainda sem setor/sugestão) — não bloqueia.
+          void this.classify.maybeClassifyByContact(phoneNumberId, m.from).catch(() => undefined);
         }
       }
     }

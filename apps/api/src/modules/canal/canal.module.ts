@@ -7,6 +7,8 @@ import { CanalConfigService } from './canal-config.service';
 import { CanalConversationService } from './canal-conversation.service';
 import { CanalExportService } from './canal-export.service';
 import { GithubSyncService } from './github-sync.service';
+import { AiService } from '../../common/ai.service';
+import { CanalClassifyService } from './canal-classify.service';
 import { CanalSchedulerService } from './canal-scheduler.service';
 import { CanalWebhookController } from './canal-webhook.controller';
 import { CanalConfigController } from './canal-config.controller';
@@ -45,10 +47,25 @@ import { CanalInboxController } from './canal-inbox.controller';
       ) => new CanalConversationService(supabase, meta),
     },
     {
-      provide: CanalExportService,
+      provide: AiService,
       inject: ['SUPABASE_CLIENT'],
       useFactory: (supabase: ReturnType<typeof createClient>) =>
-        new CanalExportService(supabase),
+        new AiService(supabase),
+    },
+    {
+      provide: CanalExportService,
+      inject: ['SUPABASE_CLIENT', AiService],
+      useFactory: (supabase: ReturnType<typeof createClient>, ai: AiService) =>
+        new CanalExportService(supabase, ai),
+    },
+    {
+      provide: CanalClassifyService,
+      inject: ['SUPABASE_CLIENT', AiService, CanalConversationService],
+      useFactory: (
+        supabase: ReturnType<typeof createClient>,
+        ai: AiService,
+        convs: CanalConversationService,
+      ) => new CanalClassifyService(supabase, ai, convs),
     },
     {
       provide: GithubSyncService,

@@ -27,6 +27,7 @@ interface Props {
   token: string | null;
   subject?: string | null;
   municipality?: string | null;
+  suggestedSectorId?: string | null;
   onBack?: () => void;
   onChanged?: () => void;
 }
@@ -43,7 +44,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   closed: { bg: 'var(--ammoc-paper-3)', color: 'var(--ammoc-ink-400)' },
 };
 
-export function CanalPanel({ conversationId, contactName, contactNumber, numberLabel, status, token, subject, municipality, onBack, onChanged }: Props) {
+export function CanalPanel({ conversationId, contactName, contactNumber, numberLabel, status, token, subject, municipality, suggestedSectorId, onBack, onChanged }: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<CanalMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,9 +97,11 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
 
   useEffect(() => { setSubjectVal(subject ?? ''); setMunicipalityVal(municipality ?? ''); }, [subject, municipality]);
 
-  // Load sectors + users for the delegation modal (lazily on first open)
+  // Load sectors + users for the delegation modal (lazily on first open).
+  // Também carrega ao montar quando há sugestão de IA, para resolver o nome do
+  // setor sugerido no chip do cabeçalho sem o usuário precisar abrir o modal.
   useEffect(() => {
-    if (!showDelegate || !token || sectors.length > 0) return;
+    if ((!showDelegate && !suggestedSectorId) || !token || sectors.length > 0) return;
     void (async () => {
       try {
         const [secRes, usrRes] = await Promise.all([
@@ -111,7 +114,18 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
         // ignore — dropdowns just stay empty
       }
     })();
-  }, [showDelegate, token, sectors.length]);
+  }, [showDelegate, token, sectors.length, suggestedSectorId]);
+
+  async function handleClassify() {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/canal/conversations/${conversationId}/classify`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({ message: res.statusText })); throw new Error(b.message ?? 'Erro ao classificar'); }
+      onChanged?.();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Erro ao classificar'); }
+  }
 
   async function handleSendText() {
     if (!token || !text.trim() || sending) return;
@@ -256,6 +270,13 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
               <>
                 {municipalityVal && <span style={{ fontSize: 11, color: 'var(--ammoc-ink-600)' }}>📍 {municipalityVal}</span>}
                 {subjectVal && <span style={{ fontSize: 11, color: 'var(--ammoc-ink-600)' }}>🏷️ {subjectVal}</span>}
+                {suggestedSectorId && (
+                  <span style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>
+                    🤖 {sectors.find(s => s.id === suggestedSectorId)?.name
+                      ? `IA sugere: ${sectors.find(s => s.id === suggestedSectorId)?.name}`
+                      : 'IA sugeriu um setor'}
+                  </span>
+                )}
                 <button type="button" onClick={() => setEditingMeta(true)} style={{ background: 'none', border: 'none', color: 'var(--ammoc-green-700)', fontSize: 11, cursor: 'pointer', padding: 0 }}>editar assunto/cidade</button>
               </>
             ) : (
@@ -287,6 +308,10 @@ export function CanalPanel({ conversationId, contactName, contactNumber, numberL
               Numa conversa Encerrada ficam ocultos até reabrir com nova mensagem. */}
           {status !== 'closed' && (
             <>
+              <button type="button" onClick={() => void handleClassify()}
+                style={{ background: 'var(--ammoc-paper-2)', border: '1.5px solid var(--ammoc-line)', color: 'var(--ammoc-ink-700)', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                🤖 Sugerir setor
+              </button>
               <button type="button" onClick={() => setShowDelegate(true)}
                 style={{ background: 'var(--ammoc-paper-2)', border: '1.5px solid var(--ammoc-line)', color: 'var(--ammoc-ink-700)', borderRadius: 'var(--radius-sm)', padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 🏛️ Delegar

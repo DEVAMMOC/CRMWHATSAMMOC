@@ -16,6 +16,7 @@ interface CanalConvRow {
   wa_contact_number: string;
   wa_contact_name: string | null;
   sector_id: string | null;
+  suggested_sector_id: string | null;
   assigned_to: string | null;
   status: CanalConversationStatus;
   subject: string | null;
@@ -209,6 +210,7 @@ export default function CanalPage() {
               status={selected.status}
               subject={selected.subject}
               municipality={selected.municipality}
+              suggestedSectorId={selected.suggested_sector_id}
               token={token}
               onBack={() => setSelectedId(null)}
               onChanged={() => { if (token) void loadConversations(token); }}
