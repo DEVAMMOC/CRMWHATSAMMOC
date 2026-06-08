@@ -75,22 +75,44 @@ export default function Sidebar({ user, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [internalUnread, setInternalUnread] = useState(0);
+  const [recebidos, setRecebidos] = useState(0);       // não atendidas (Aguardando/Pendente)
+  const [atendimentos, setAtendimentos] = useState(0); // em atendimento
 
-  // Poll the unread internal-message count for this user (15s + on mount).
+  // Poll badges para esta sessão (15s + ao montar). Todas as contagens são
+  // RLS-scoped — batem com o que cada papel vê nas próprias telas.
   useEffect(() => {
     const supabase = createClient();
-    const loadUnread = async () => {
-      const { count } = await supabase
-        .from('internal_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('recipient_id', user.id)
-        .is('read_at', null);
-      setInternalUnread(count ?? 0);
+    const headCount = (q: { count: number | null }) => q.count ?? 0;
+    const load = async () => {
+      const [unread, convPend, canalOpen, attActive, canalHuman] = await Promise.all([
+        supabase.from('internal_messages').select('id', { count: 'exact', head: true })
+          .eq('recipient_id', user.id).is('read_at', null),
+        // Recebidos = conversas pessoais pendentes + Canal "Aguardando" (open).
+        supabase.from('conversations').select('id', { count: 'exact', head: true })
+          .eq('status', 'pendente'),
+        supabase.from('canal_conversations').select('id', { count: 'exact', head: true })
+          .eq('status', 'open'),
+        // Atendimentos = atendimentos pessoais não encerrados + Canal "Em atendimento" (human).
+        supabase.from('attendances').select('id', { count: 'exact', head: true })
+          .neq('status', 'encerrado'),
+        supabase.from('canal_conversations').select('id', { count: 'exact', head: true })
+          .eq('status', 'human'),
+      ]);
+      setInternalUnread(headCount(unread));
+      setRecebidos(headCount(convPend) + headCount(canalOpen));
+      setAtendimentos(headCount(attActive) + headCount(canalHuman));
     };
-    void loadUnread();
-    const iv = setInterval(() => { void loadUnread(); }, 15000);
+    void load();
+    const iv = setInterval(() => { void load(); }, 15000);
     return () => clearInterval(iv);
   }, [user.id]);
+
+  // Injeta os badges ao vivo nos itens do "Meu painel".
+  const funcionarioNav: NavItem[] = FUNCIONARIO_NAV.map(item => {
+    if (item.href === '/recebidos' && recebidos > 0) return { ...item, badge: recebidos };
+    if (item.href === '/atendimentos' && atendimentos > 0) return { ...item, badge: atendimentos };
+    return item;
+  });
 
   // Inject the live badge into the Comunicação Interna item.
   const orgNav: NavItem[] = ORG_NAV.map(item =>
@@ -125,7 +147,7 @@ export default function Sidebar({ user, onNavigate }: SidebarProps) {
 
       <div className={styles.body}>
         <div className={styles.navSection}>Meu painel</div>
-        {FUNCIONARIO_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
+        {funcionarioNav.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         <div className={styles.navSection}>WhatsApp</div>
         {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
