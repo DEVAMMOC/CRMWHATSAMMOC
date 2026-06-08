@@ -1,6 +1,7 @@
 // apps/web/src/components/layout/Sidebar.tsx
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -30,6 +31,7 @@ const WHATSAPP_NAV: NavItem[] = [
 const ORG_NAV: NavItem[] = [
   { icon: '📇', label: 'Contatos', href: '/contatos' },
   { icon: '👥', label: 'Equipe', href: '/equipe' },
+  { icon: '💬', label: 'Comunicação Interna', href: '/comunicacao-interna' },
 ];
 
 const CANAL_NAV: NavItem[] = [
@@ -72,6 +74,30 @@ interface SidebarProps {
 export default function Sidebar({ user, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [internalUnread, setInternalUnread] = useState(0);
+
+  // Poll the unread internal-message count for this user (15s + on mount).
+  useEffect(() => {
+    const supabase = createClient();
+    const loadUnread = async () => {
+      const { count } = await supabase
+        .from('internal_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .is('read_at', null);
+      setInternalUnread(count ?? 0);
+    };
+    void loadUnread();
+    const iv = setInterval(() => { void loadUnread(); }, 15000);
+    return () => clearInterval(iv);
+  }, [user.id]);
+
+  // Inject the live badge into the Comunicação Interna item.
+  const orgNav: NavItem[] = ORG_NAV.map(item =>
+    item.href === '/comunicacao-interna' && internalUnread > 0
+      ? { ...item, badge: internalUnread }
+      : item,
+  );
 
   async function handleLogout() {
     const supabase = createClient();
@@ -105,7 +131,7 @@ export default function Sidebar({ user, onNavigate }: SidebarProps) {
         {WHATSAPP_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         <div className={styles.navSection}>Organização</div>
-        {ORG_NAV.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
+        {orgNav.map(item => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />)}
 
         {(user.role === 'supervisor' || user.role === 'admin') && (
           <>
