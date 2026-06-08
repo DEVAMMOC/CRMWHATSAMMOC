@@ -13,6 +13,7 @@ interface OrgUser {
   id: string;
   name: string;
   role: string;
+  avatar_url?: string | null;
 }
 
 function initialsOf(name: string): string {
@@ -196,9 +197,15 @@ export default function ComunicacaoInternaPage() {
                       transition: 'background 0.1s', cursor: 'pointer',
                     }}
                   >
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, background: 'var(--ammoc-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 15, fontWeight: 700 }}>
-                      {initialsOf(u.name) || '?'}
-                    </div>
+                    {u.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.avatar_url} alt={u.name}
+                        style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, background: 'var(--ammoc-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 15, fontWeight: 700 }}>
+                        {initialsOf(u.name) || '?'}
+                      </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{u.name}</div>
                       <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -224,6 +231,7 @@ export default function ComunicacaoInternaPage() {
               key={selected.id}
               meId={meId}
               other={selected}
+              avatarUrl={selected.avatar_url}
               subtitle={sectorByUser[selected.id] ? `${sectorByUser[selected.id]} · ${selected.role}` : selected.role}
               onBack={() => setSelectedId(null)}
               onMarkedRead={handleMarkedRead}
@@ -243,12 +251,13 @@ export default function ComunicacaoInternaPage() {
 interface PanelProps {
   meId: string;
   other: OrgUser;
+  avatarUrl?: string | null;
   subtitle?: string;
   onBack?: () => void;
   onMarkedRead?: (otherId: string) => void;
 }
 
-function InternalChatPanel({ meId, other, subtitle, onBack, onMarkedRead }: PanelProps) {
+function InternalChatPanel({ meId, other, avatarUrl, subtitle, onBack, onMarkedRead }: PanelProps) {
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<InternalMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -326,9 +335,15 @@ function InternalChatPanel({ meId, other, subtitle, onBack, onMarkedRead }: Pane
         {onBack && (
           <button type="button" onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--ammoc-ink-600)', padding: 0, marginRight: 2 }}>←</button>
         )}
-        <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: 'var(--ammoc-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>
-          {initials || '?'}
-        </div>
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt={other.name}
+            style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: 'var(--ammoc-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>
+            {initials || '?'}
+          </div>
+        )}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{other.name}</div>
           <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>{subtitle ?? other.role}</div>

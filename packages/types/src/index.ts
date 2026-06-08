@@ -30,6 +30,7 @@ export interface AppUser {
   evolution_instance_token: string | null;
   whatsapp_status: 'disconnected' | 'connecting' | 'connected';
   is_online: boolean;
+  avatar_url: string | null;
   created_at: string;
 }
 

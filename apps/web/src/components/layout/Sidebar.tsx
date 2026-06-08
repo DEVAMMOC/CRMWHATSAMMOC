@@ -175,14 +175,27 @@ export default function Sidebar({ user, onNavigate }: SidebarProps) {
       </div>
 
       <div className={styles.footer}>
-        <div className={styles.userRow}>
-          <div className={styles.avatar}>{initials(user.name)}</div>
-          <div>
-            <div className={styles.userName}>{user.name}</div>
-            <div className={styles.userRole}>{user.role}</div>
+        <Link href="/perfil" title="Editar perfil" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div className={styles.userRow}>
+            <div className={styles.avatar}>
+              {user.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatar_url}
+                  alt={user.name}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                />
+              ) : (
+                initials(user.name)
+              )}
+            </div>
+            <div>
+              <div className={styles.userName}>{user.name}</div>
+              <div className={styles.userRole}>{user.role}</div>
+            </div>
+            <div className={styles.statusDot} />
           </div>
-          <div className={styles.statusDot} />
-        </div>
+        </Link>
         <button className={styles.logoutBtn} onClick={handleLogout}>
           Sair da conta
         </button>

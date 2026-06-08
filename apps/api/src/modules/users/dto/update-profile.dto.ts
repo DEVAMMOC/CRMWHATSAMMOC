@@ -9,4 +9,9 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   whatsapp_number?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  avatar_url?: string;
 }

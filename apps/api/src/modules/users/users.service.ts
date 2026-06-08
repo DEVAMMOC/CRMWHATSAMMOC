@@ -17,7 +17,7 @@ import type { UpdateProfileDto } from './dto/update-profile.dto';
  * be exposed via the users list API. Mirrors the SectorsService precedent.
  */
 const SAFE_USER_COLUMNS =
-  'id, email, name, role, whatsapp_number, whatsapp_status, is_online, created_at';
+  'id, email, name, role, whatsapp_number, whatsapp_status, is_online, avatar_url, created_at';
 
 @Injectable()
 export class UsersService {

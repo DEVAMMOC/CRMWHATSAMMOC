@@ -11,7 +11,7 @@ import type {
 // users(*) here: that would leak secrets such as evolution_instance_token to
 // any authenticated client via GET /sectors and GET /sectors/:id.
 const MEMBER_COLUMNS =
-  'id, email, name, role, whatsapp_number, whatsapp_status, is_online, created_at';
+  'id, email, name, role, whatsapp_number, whatsapp_status, is_online, avatar_url, created_at';
 import type { CreateSectorDto } from './dto/create-sector.dto';
 import type { UpdateSectorDto } from './dto/update-sector.dto';
 
