@@ -4,12 +4,14 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBase } from '@/lib/api-base';
 import { useIsMobile } from '@/lib/use-is-mobile';
+import { phoneKey } from '@/lib/phone';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Origem = 'pessoal' | 'canal' | 'ambos';
 
 interface SourceRow {
+  contact_id: string | null;
   contact_name: string;
   contact_number: string;
   municipality: string | null;
@@ -25,7 +27,8 @@ interface Category {
 }
 
 interface Contact {
-  number: string;            // normalized digits (dedupe key)
+  contactId: string;         // canonical contacts.id (dedupe key) — unifica Canal + pessoal
+  number: string;            // representative normalized digits (display + writes)
   rawNumber: string;         // first-seen raw number (for display fallback)
   name: string;
   municipality: string | null;
@@ -96,8 +99,8 @@ export default function ContatosPage() {
   const [catSaving, setCatSaving] = useState(false);
   const [catError, setCatError] = useState('');
 
-  // per-contact upload state
-  const [uploadingNumber, setUploadingNumber] = useState<string | null>(null);
+  // per-contact upload state (keyed by canonical contactId)
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   const categoryById = useMemo(() => {
     const m = new Map<string, Category>();
@@ -122,13 +125,13 @@ export default function ContatosPage() {
 
       const [convRes, canalRes, catRes, assignRes, photoRes] = await Promise.all([
         supabase.from('conversations')
-          .select('contact_name, contact_number, municipality, status, last_message_at')
+          .select('contact_id, contact_name, contact_number, municipality, status, last_message_at')
           .neq('status', 'nao_salva'),
         supabase.from('canal_conversations')
-          .select('wa_contact_name, wa_contact_number, status, last_message_at'),
+          .select('contact_id, wa_contact_name, wa_contact_number, status, last_message_at'),
         supabase.from('contact_categories').select('id, name, color').order('name'),
-        supabase.from('contact_category_assignments').select('contact_number, category_id'),
-        supabase.from('contact_photos').select('contact_number, photo_url'),
+        supabase.from('contact_category_assignments').select('contact_id, contact_number, category_id'),
+        supabase.from('contact_photos').select('contact_id, contact_number, photo_url'),
       ]);
 
       if (convRes.error) throw convRes.error;
@@ -138,22 +141,23 @@ export default function ContatosPage() {
       const cats = (catRes.data ?? []) as Category[];
       setCategories(cats);
 
-      // number(normalized) → category_ids
+      // contact_id → category_ids
       const catMap = new Map<string, string[]>();
-      for (const a of (assignRes.data ?? []) as { contact_number: string; category_id: string }[]) {
-        const key = norm(a.contact_number);
-        const arr = catMap.get(key) ?? [];
-        arr.push(a.category_id);
-        catMap.set(key, arr);
+      for (const a of (assignRes.data ?? []) as { contact_id: string | null; category_id: string }[]) {
+        if (!a.contact_id) continue;
+        const arr = catMap.get(a.contact_id) ?? [];
+        if (!arr.includes(a.category_id)) arr.push(a.category_id);
+        catMap.set(a.contact_id, arr);
       }
-      // number(normalized) → photo_url
+      // contact_id → photo_url
       const photoMap = new Map<string, string>();
-      for (const p of (photoRes.data ?? []) as { contact_number: string; photo_url: string }[]) {
-        photoMap.set(norm(p.contact_number), p.photo_url);
+      for (const p of (photoRes.data ?? []) as { contact_id: string | null; photo_url: string }[]) {
+        if (p.contact_id) photoMap.set(p.contact_id, p.photo_url);
       }
 
       const rows: SourceRow[] = [
-        ...((convRes.data ?? []) as Array<{ contact_name: string; contact_number: string; municipality: string | null; status: string; last_message_at: string | null }>).map(r => ({
+        ...((convRes.data ?? []) as Array<{ contact_id: string | null; contact_name: string; contact_number: string; municipality: string | null; status: string; last_message_at: string | null }>).map(r => ({
+          contact_id: r.contact_id,
           contact_name: r.contact_name,
           contact_number: r.contact_number,
           municipality: r.municipality,
@@ -161,7 +165,8 @@ export default function ContatosPage() {
           last_message_at: r.last_message_at,
           origem: 'pessoal' as const,
         })),
-        ...((canalRes.data ?? []) as Array<{ wa_contact_name: string | null; wa_contact_number: string; status: string; last_message_at: string | null }>).map(r => ({
+        ...((canalRes.data ?? []) as Array<{ contact_id: string | null; wa_contact_name: string | null; wa_contact_number: string; status: string; last_message_at: string | null }>).map(r => ({
+          contact_id: r.contact_id,
           contact_name: r.wa_contact_name ?? r.wa_contact_number,
           contact_number: r.wa_contact_number,
           municipality: null,
@@ -171,23 +176,26 @@ export default function ContatosPage() {
         })),
       ];
 
-      // Dedupe by normalized number: keep most recent last_message_at; mark 'ambos' if both sources.
+      // Dedupe by canonical contact_id (fallback: normalized number quando sem contato).
+      // Número X que entra pelo Canal E pelo compartilhado vira 1 contato só.
       const map = new Map<string, Contact>();
       for (const r of rows) {
-        const key = norm(r.contact_number);
-        if (!key) continue;
+        const num = norm(r.contact_number);
+        if (!r.contact_id && !num) continue;
+        const key = r.contact_id ?? `n:${phoneKey(r.contact_number)}`;
         const existing = map.get(key);
         if (!existing) {
           map.set(key, {
-            number: key,
+            contactId: key,
+            number: num,
             rawNumber: r.contact_number,
             name: r.contact_name,
             municipality: r.municipality,
             status: r.status,
             last_message_at: r.last_message_at,
             origem: r.origem,
-            categoryIds: catMap.get(key) ?? [],
-            photoUrl: photoMap.get(key),
+            categoryIds: r.contact_id ? (catMap.get(r.contact_id) ?? []) : [],
+            photoUrl: r.contact_id ? photoMap.get(r.contact_id) : undefined,
           });
         } else {
           const origem: Origem = existing.origem === r.origem ? existing.origem : 'ambos';
@@ -261,36 +269,37 @@ export default function ContatosPage() {
   }, [filtered, token]);
 
   // ── Category assign / remove ─────────────────────────────────────────────────
-  async function assignCategory(number: string, categoryId: string) {
+  // Escrita por contact_number (trigger resolve o contact_id); leitura/estado por contactId.
+  async function assignCategory(c: Contact, categoryId: string) {
     const { error: err } = await supabase
       .from('contact_category_assignments')
-      .insert({ contact_number: number, category_id: categoryId });
+      .insert({ contact_number: c.number, category_id: categoryId });
     if (err) { setError(err.message); return; }
-    setContacts(prev => prev.map(c =>
-      c.number === number && !c.categoryIds.includes(categoryId)
-        ? { ...c, categoryIds: [...c.categoryIds, categoryId] }
-        : c));
+    setContacts(prev => prev.map(x =>
+      x.contactId === c.contactId && !x.categoryIds.includes(categoryId)
+        ? { ...x, categoryIds: [...x.categoryIds, categoryId] }
+        : x));
   }
-  async function removeCategory(number: string, categoryId: string) {
-    const { error: err } = await supabase
-      .from('contact_category_assignments')
-      .delete()
-      .eq('contact_number', number)
-      .eq('category_id', categoryId);
+  async function removeCategory(c: Contact, categoryId: string) {
+    const del = supabase.from('contact_category_assignments').delete().eq('category_id', categoryId);
+    // Remove por contact_id (cobre múltiplos números do mesmo contato); fallback por número.
+    const { error: err } = c.contactId.startsWith('n:')
+      ? await del.eq('contact_number', c.number)
+      : await del.eq('contact_id', c.contactId);
     if (err) { setError(err.message); return; }
-    setContacts(prev => prev.map(c =>
-      c.number === number
-        ? { ...c, categoryIds: c.categoryIds.filter(id => id !== categoryId) }
-        : c));
+    setContacts(prev => prev.map(x =>
+      x.contactId === c.contactId
+        ? { ...x, categoryIds: x.categoryIds.filter(id => id !== categoryId) }
+        : x));
   }
 
   // ── Photo upload ─────────────────────────────────────────────────────────────
-  async function handlePhotoUpload(number: string, file: File) {
-    setUploadingNumber(number);
+  async function handlePhotoUpload(c: Contact, file: File) {
+    setUploadingId(c.contactId);
     setError(null);
     try {
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `contacts/${number}-${Date.now()}.${ext}`;
+      const path = `contacts/${c.number}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from('wa-media')
         .upload(path, file, { contentType: file.type, upsert: true });
@@ -299,13 +308,17 @@ export default function ContatosPage() {
       const photoUrl = pub.publicUrl;
       const { error: dbErr } = await supabase
         .from('contact_photos')
-        .upsert({ contact_number: number, photo_url: photoUrl });
+        .upsert({ contact_number: c.number, photo_url: photoUrl });
       if (dbErr) throw dbErr;
-      setContacts(prev => prev.map(c => c.number === number ? { ...c, photoUrl } : c));
+      // Espelha no contato canônico (unifica a foto em todo o sistema).
+      if (!c.contactId.startsWith('n:')) {
+        await supabase.from('contacts').update({ photo_url: photoUrl }).eq('id', c.contactId);
+      }
+      setContacts(prev => prev.map(x => x.contactId === c.contactId ? { ...x, photoUrl } : x));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro ao enviar foto.');
     } finally {
-      setUploadingNumber(null);
+      setUploadingId(null);
     }
   }
 
@@ -443,7 +456,7 @@ export default function ContatosPage() {
           const photo = c.photoUrl ?? avatars[c.number] ?? null;
           const origem = ORIGEM_STYLE[c.origem];
           return (
-            <div key={c.number}
+            <div key={c.contactId}
               style={{ background: 'var(--ammoc-paper)', border: '1px solid var(--ammoc-line-2)',
                 borderRadius: 'var(--radius)', padding: '12px 16px',
                 display: 'flex', alignItems: 'flex-start', gap: 12,
@@ -496,7 +509,7 @@ export default function ContatosPage() {
                         padding: '2px 8px', borderRadius: 99 }}>
                         {cat.name}
                         {isManager && (
-                          <button type="button" onClick={() => void removeCategory(c.number, id)}
+                          <button type="button" onClick={() => void removeCategory(c, id)}
                             title="Remover categoria"
                             style={{ background: 'none', border: 'none', cursor: 'pointer',
                               color: textOn(cat.color), fontSize: 13, lineHeight: 1, padding: 0 }}>
@@ -509,7 +522,7 @@ export default function ContatosPage() {
                   {isManager && categories.some(cat => !c.categoryIds.includes(cat.id)) && (
                     <select
                       value=""
-                      onChange={e => { if (e.target.value) { void assignCategory(c.number, e.target.value); e.target.value = ''; } }}
+                      onChange={e => { if (e.target.value) { void assignCategory(c, e.target.value); e.target.value = ''; } }}
                       style={{ fontSize: 11, border: '1px dashed var(--ammoc-green)', background: 'none',
                         color: 'var(--ammoc-green-700)', borderRadius: 99, padding: '2px 8px', cursor: 'pointer' }}>
                       <option value="">＋ categoria</option>
@@ -524,12 +537,12 @@ export default function ContatosPage() {
               {/* Photo upload (managers) */}
               {isManager && (
                 <label title="Enviar foto"
-                  style={{ flexShrink: 0, cursor: uploadingNumber === c.number ? 'default' : 'pointer',
-                    fontSize: 18, alignSelf: 'center', opacity: uploadingNumber === c.number ? 0.5 : 1 }}>
-                  {uploadingNumber === c.number ? '⏳' : '📷'}
+                  style={{ flexShrink: 0, cursor: uploadingId === c.contactId ? 'default' : 'pointer',
+                    fontSize: 18, alignSelf: 'center', opacity: uploadingId === c.contactId ? 0.5 : 1 }}>
+                  {uploadingId === c.contactId ? '⏳' : '📷'}
                   <input type="file" accept="image/*" style={{ display: 'none' }}
-                    disabled={uploadingNumber === c.number}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) void handlePhotoUpload(c.number, f); e.target.value = ''; }} />
+                    disabled={uploadingId === c.contactId}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) void handlePhotoUpload(c, f); e.target.value = ''; }} />
                 </label>
               )}
             </div>
