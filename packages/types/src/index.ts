@@ -192,3 +192,12 @@ export interface CanalMessage {
   sent_by: string | null;
   sent_at: string;
 }
+
+export interface InternalMessage {
+  id: string;
+  sender_id: string | null;
+  recipient_id: string | null;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+}
