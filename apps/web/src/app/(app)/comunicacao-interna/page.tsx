@@ -30,6 +30,7 @@ export default function ComunicacaoInternaPage() {
   const [meId, setMeId] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [users, setUsers] = useState<OrgUser[]>([]);
+  const [sectorByUser, setSectorByUser] = useState<Record<string, string>>({});
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -53,6 +54,24 @@ export default function ComunicacaoInternaPage() {
       setUsersError(e instanceof Error ? e.message : 'Erro ao carregar usuários');
     }
     setLoadingUsers(false);
+  }, []);
+
+  // Mapa user_id → setor(es). Fonte: GET /api/sectors (cada setor traz members).
+  const loadSectors = useCallback(async (tok: string) => {
+    try {
+      const res = await fetch(`${API}/api/sectors`, { headers: { Authorization: `Bearer ${tok}` } });
+      if (!res.ok) return;
+      const data = await res.json() as Array<{ name: string; members?: Array<{ id: string }> }>;
+      const byUser: Record<string, string[]> = {};
+      for (const s of data) {
+        for (const m of s.members ?? []) (byUser[m.id] ??= []).push(s.name);
+      }
+      const flat: Record<string, string> = {};
+      for (const [uid, names] of Object.entries(byUser)) flat[uid] = names.join(', ');
+      setSectorByUser(flat);
+    } catch {
+      // ignore — apenas o cargo será exibido
+    }
   }, []);
 
   // Compute the unread badge + last-activity maps from all my conversations.
@@ -87,6 +106,7 @@ export default function ComunicacaoInternaPage() {
       setMeId(me);
       if (tok && me) {
         await loadUsers(tok, me);
+        await loadSectors(tok);
         await loadOverview(me);
         iv = setInterval(() => { void loadOverview(me); }, 5000);
       } else {
@@ -94,7 +114,7 @@ export default function ComunicacaoInternaPage() {
       }
     })();
     return () => { if (iv) clearInterval(iv); };
-  }, [supabase, loadUsers, loadOverview]);
+  }, [supabase, loadUsers, loadSectors, loadOverview]);
 
   const filtered = users
     .filter(u => {
@@ -181,7 +201,9 @@ export default function ComunicacaoInternaPage() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{u.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>{u.role}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {sectorByUser[u.id] ? `${sectorByUser[u.id]} · ${u.role}` : u.role}
+                      </div>
                     </div>
                     {count > 0 && (
                       <span style={{ flexShrink: 0, minWidth: 20, height: 20, padding: '0 6px', borderRadius: 999, background: 'var(--ammoc-green)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -202,6 +224,7 @@ export default function ComunicacaoInternaPage() {
               key={selected.id}
               meId={meId}
               other={selected}
+              subtitle={sectorByUser[selected.id] ? `${sectorByUser[selected.id]} · ${selected.role}` : selected.role}
               onBack={() => setSelectedId(null)}
               onMarkedRead={handleMarkedRead}
             />
@@ -220,11 +243,12 @@ export default function ComunicacaoInternaPage() {
 interface PanelProps {
   meId: string;
   other: OrgUser;
+  subtitle?: string;
   onBack?: () => void;
   onMarkedRead?: (otherId: string) => void;
 }
 
-function InternalChatPanel({ meId, other, onBack, onMarkedRead }: PanelProps) {
+function InternalChatPanel({ meId, other, subtitle, onBack, onMarkedRead }: PanelProps) {
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<InternalMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,7 +331,7 @@ function InternalChatPanel({ meId, other, onBack, onMarkedRead }: PanelProps) {
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ammoc-ink-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{other.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>{other.role}</div>
+          <div style={{ fontSize: 11, color: 'var(--ammoc-ink-400)' }}>{subtitle ?? other.role}</div>
         </div>
       </div>
 

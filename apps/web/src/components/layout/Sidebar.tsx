@@ -14,6 +14,7 @@ interface NavItem {
   label: string;
   href: string;
   badge?: number;
+  badgeTone?: 'red' | 'green';
   dot?: boolean;
 }
 
@@ -60,7 +61,14 @@ function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: stri
     >
       <span className={styles.navIcon}>{item.icon}</span>
       {item.label}
-      {item.badge != null && <span className={styles.navBadge}>{item.badge}</span>}
+      {item.badge != null && (
+        <span
+          className={styles.navBadge}
+          style={item.badgeTone === 'green' ? { background: 'var(--ammoc-green)' } : undefined}
+        >
+          {item.badge}
+        </span>
+      )}
       {item.dot && <span className={styles.navDot} />}
     </Link>
   );
@@ -109,8 +117,8 @@ export default function Sidebar({ user, onNavigate }: SidebarProps) {
 
   // Injeta os badges ao vivo nos itens do "Meu painel".
   const funcionarioNav: NavItem[] = FUNCIONARIO_NAV.map(item => {
-    if (item.href === '/recebidos' && recebidos > 0) return { ...item, badge: recebidos };
-    if (item.href === '/atendimentos' && atendimentos > 0) return { ...item, badge: atendimentos };
+    if (item.href === '/recebidos' && recebidos > 0) return { ...item, badge: recebidos, badgeTone: 'red' as const };
+    if (item.href === '/atendimentos' && atendimentos > 0) return { ...item, badge: atendimentos, badgeTone: 'green' as const };
     return item;
   });
 
